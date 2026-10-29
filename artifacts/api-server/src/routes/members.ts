@@ -1,16 +1,23 @@
 import { randomInt } from 'node:crypto';
 
 import { RegisterMemberBody } from '@workspace/api-zod';
-import { db, membersTable } from '@workspace/db';
+import { db, eq, membersTable } from '@workspace/db';
 import { Router } from 'express';
-import { eq } from 'drizzle-orm';
 
 import {
   HttpError,
   isUniqueViolation,
   requireNonEmptyText,
 } from '../lib/errors';
-import { findMemberByClerkId } from '../lib/members';
+import {
+  clearKakaoLink,
+  issueLinkCode,
+  LINK_CODE_TTL_MINUTES,
+} from '../lib/kakao-link';
+import {
+  findMemberByClerkId,
+  requireMemberByClerkId,
+} from '../lib/members';
 import { serializeMember } from '../lib/serializers';
 import { requireUser } from '../middleware/auth';
 
@@ -62,6 +69,32 @@ export const membersRouter: Router = Router();
 membersRouter.get('/members/me', requireUser, async (_request, response) => {
   const member = await findMemberByClerkId(response.locals.userId);
   response.json({ member: member ? serializeMember(member) : null });
+});
+
+membersRouter.post(
+  '/members/me/kakao/link-code',
+  requireUser,
+  async (_request, response) => {
+    const member = await requireMemberByClerkId(
+      response.locals.userId as string,
+    );
+    const { code, expiresAt } = await issueLinkCode(db, member.id);
+
+    response.json({
+      code,
+      expiresAt,
+      expiresInMinutes: LINK_CODE_TTL_MINUTES,
+    });
+  },
+);
+
+membersRouter.delete('/members/me/kakao', requireUser, async (_request, response) => {
+  const member = await requireMemberByClerkId(
+    response.locals.userId as string,
+  );
+  const updated = await clearKakaoLink(db, member.id);
+
+  response.json({ member: serializeMember(updated) });
 });
 
 membersRouter.post('/members', requireUser, async (request, response) => {

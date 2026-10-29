@@ -42,6 +42,34 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/MyMemberResponse"
+  /members/me/kakao/link-code:
+    post:
+      operationId: issueKakaoLinkCode
+      tags: [members]
+      summary: Issue a one-time KakaoTalk linking code
+      responses:
+        "200":
+          description: One-time code to send from KakaoTalk
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KakaoLinkCode"
+        "404":
+          description: Member registration is required
+  /members/me/kakao:
+    delete:
+      operationId: unlinkKakao
+      tags: [members]
+      summary: Remove the KakaoTalk link from the signed-in member
+      responses:
+        "200":
+          description: Updated member
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MyMemberResponse"
+        "404":
+          description: Member registration is required
   /members:
     post:
       operationId: registerMember
@@ -357,13 +385,14 @@ components:
         - status
     Member:
       type: object
-      required: [id, memberNumber, displayName, openChatNickname, linkStatus, level, exp, totalExp, tier, status, joinedAt]
+      required: [id, memberNumber, displayName, openChatNickname, linkStatus, kakaoLinked, level, exp, totalExp, tier, status, joinedAt]
       properties:
         id: { type: integer }
         memberNumber: { type: string, pattern: "^[0-9]{6}$" }
         displayName: { type: string }
         openChatNickname: { type: ["string", "null"] }
         linkStatus: { type: string, enum: [unlinked, pending, verified] }
+        kakaoLinked: { type: boolean }
         level: { type: integer }
         exp: { type: integer }
         totalExp: { type: integer }
@@ -389,6 +418,13 @@ components:
           oneOf:
             - $ref: "#/components/schemas/Member"
             - type: "null"
+    KakaoLinkCode:
+      type: object
+      required: [code, expiresAt, expiresInMinutes]
+      properties:
+        code: { type: string, pattern: "^[A-HJ-NP-Z2-9]{6}$" }
+        expiresAt: { type: string, format: date-time }
+        expiresInMinutes: { type: integer }
     MemberRegistrationInput:
       type: object
       required: [displayName, openChatNickname]
@@ -410,7 +446,7 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/MemberRanking"
-        kakaoIntegration: { type: string, enum: [waiting] }
+        kakaoIntegration: { type: string, enum: [available, linked] }
     LeaderboardResponse:
       type: array
       items:

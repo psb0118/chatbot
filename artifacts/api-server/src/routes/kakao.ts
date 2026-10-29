@@ -2,8 +2,8 @@ import { timingSafeEqual } from 'node:crypto';
 
 import { Router } from 'express';
 
-import { createBotReply } from '../bot/engine';
-import { readUtterance, toKakaoResponse } from '../bot/kakao';
+import { handleBotMessage } from '../bot/handler';
+import { readBotUserKey, readUtterance, toKakaoResponse } from '../bot/kakao';
 import { config } from '../config';
 
 const secretMatches = (provided: string, expected: string): boolean => {
@@ -27,7 +27,7 @@ export const kakaoRouter: Router = Router();
  * `x-kakao-skill-secret` header in the Open Builder skill settings (or append
  * it as `?secret=...` to the URL).
  */
-kakaoRouter.post('/webhooks/kakao', (request, response) => {
+kakaoRouter.post('/webhooks/kakao', async (request, response) => {
   if (config.kakaoSkillSecret) {
     const querySecret =
       typeof request.query.secret === 'string' ? request.query.secret : '';
@@ -44,8 +44,22 @@ kakaoRouter.post('/webhooks/kakao', (request, response) => {
     }
   }
 
-  const utterance = readUtterance(request.body);
-  const reply = createBotReply(utterance, config.publicAppUrl);
+  try {
+    const reply = await handleBotMessage({
+      utterance: readUtterance(request.body),
+      botUserKey: readBotUserKey(request.body),
+      appUrl: config.publicAppUrl,
+    });
 
-  response.status(200).json(toKakaoResponse(reply));
+    response.status(200).json(toKakaoResponse(reply));
+  } catch (error) {
+    // Kakao treats non-2xx responses as a skill failure, so answer with a
+    // readable fallback and keep the details in the server log.
+    request.log.error({ err: error }, 'Kakao skill handling failed');
+    response.status(200).json(
+      toKakaoResponse({
+        text: '지금은 요청을 처리할 수 없어요. 잠시 후 다시 시도해 주세요.',
+      }),
+    );
+  }
 });

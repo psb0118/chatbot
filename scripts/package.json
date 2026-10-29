@@ -5,7 +5,11 @@
   "type": "module",
   "scripts": {
     "hello": "tsx src/hello.ts",
+    "seed": "node --env-file-if-exists=../../.env --env-file-if-exists=../../artifacts/api-server/.env --import tsx src/seed.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@workspace/db": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "catalog:",

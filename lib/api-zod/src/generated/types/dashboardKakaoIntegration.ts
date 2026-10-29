@@ -10,5 +10,6 @@ export type DashboardKakaoIntegration = typeof DashboardKakaoIntegration[keyof t
 
 
 export const DashboardKakaoIntegration = {
-  waiting: 'waiting',
+  available: 'available',
+  linked: 'linked',
 } as const;

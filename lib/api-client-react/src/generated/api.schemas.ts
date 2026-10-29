@@ -34,6 +34,7 @@ export interface Member {
   /** @nullable */
   openChatNickname: string | null;
   linkStatus: MemberLinkStatus;
+  kakaoLinked: boolean;
   level: number;
   exp: number;
   totalExp: number;
@@ -57,6 +58,13 @@ export interface MyMemberResponse {
   member: Member | null;
 }
 
+export interface KakaoLinkCode {
+  /** @pattern ^[A-HJ-NP-Z2-9]{6}$ */
+  code: string;
+  expiresAt: string;
+  expiresInMinutes: number;
+}
+
 export interface MemberRegistrationInput {
   /**
      * @minLength 1
@@ -74,7 +82,8 @@ export type DashboardKakaoIntegration = typeof DashboardKakaoIntegration[keyof t
 
 
 export const DashboardKakaoIntegration = {
-  waiting: 'waiting',
+  available: 'available',
+  linked: 'linked',
 } as const;
 
 export interface Dashboard {

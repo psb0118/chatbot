@@ -16,6 +16,7 @@ export interface Member {
   /** @nullable */
   openChatNickname: string | null;
   linkStatus: MemberLinkStatus;
+  kakaoLinked: boolean;
   level: number;
   exp: number;
   totalExp: number;

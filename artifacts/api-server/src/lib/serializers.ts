@@ -17,6 +17,7 @@ export const serializeMember = (member: Member) => ({
   displayName: member.displayName,
   openChatNickname: member.openChatNickname,
   linkStatus: member.linkStatus,
+  kakaoLinked: Boolean(member.kakaoUserKey),
   level: member.level,
   exp: member.exp,
   totalExp: member.totalExp,

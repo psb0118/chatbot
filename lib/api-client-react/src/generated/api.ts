@@ -36,6 +36,7 @@ import type {
   EventClaimReviewInput,
   EventInput,
   HealthStatus,
+  KakaoLinkCode,
   LeaderboardResponse,
   ListAdminAttendanceParams,
   ListAdminEventClaimsParams,
@@ -274,6 +275,154 @@ export function useGetMyMember<TData = Awaited<ReturnType<typeof getMyMember>>, 
 
 
 
+
+export const getIssueKakaoLinkCodeUrl = () => {
+
+
+
+
+  return `/api/members/me/kakao/link-code`
+}
+
+/**
+ * @summary Issue a one-time KakaoTalk linking code
+ */
+export const issueKakaoLinkCode = async ( options?: Parameters<typeof customFetch>[1]): Promise<KakaoLinkCode> => {
+
+  return customFetch<KakaoLinkCode>(getIssueKakaoLinkCodeUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getIssueKakaoLinkCodeMutationKey = () => ['issueKakaoLinkCode'] as const;
+
+export const getIssueKakaoLinkCodeMutationOptions = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof issueKakaoLinkCode>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof issueKakaoLinkCode>>, TError,void, TContext> => {
+
+const mutationKey = getIssueKakaoLinkCodeMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof issueKakaoLinkCode>>, void> = () => {
+
+
+          return  issueKakaoLinkCode(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type IssueKakaoLinkCodeMutationResult = NonNullable<Awaited<ReturnType<typeof issueKakaoLinkCode>>>
+
+    export type IssueKakaoLinkCodeMutationError = void
+
+
+    /**
+ * @summary Issue a one-time KakaoTalk linking code
+ */
+export const useIssueKakaoLinkCode = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof issueKakaoLinkCode>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof issueKakaoLinkCode>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getIssueKakaoLinkCodeMutationOptions(options), queryClient);
+    }
+
+export const getUnlinkKakaoUrl = () => {
+
+
+
+
+  return `/api/members/me/kakao`
+}
+
+/**
+ * @summary Remove the KakaoTalk link from the signed-in member
+ */
+export const unlinkKakao = async ( options?: Parameters<typeof customFetch>[1]): Promise<MyMemberResponse> => {
+
+  return customFetch<MyMemberResponse>(getUnlinkKakaoUrl(),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getUnlinkKakaoMutationKey = () => ['unlinkKakao'] as const;
+
+export const getUnlinkKakaoMutationOptions = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof unlinkKakao>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof unlinkKakao>>, TError,void, TContext> => {
+
+const mutationKey = getUnlinkKakaoMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof unlinkKakao>>, void> = () => {
+
+
+          return  unlinkKakao(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UnlinkKakaoMutationResult = NonNullable<Awaited<ReturnType<typeof unlinkKakao>>>
+
+    export type UnlinkKakaoMutationError = void
+
+
+    /**
+ * @summary Remove the KakaoTalk link from the signed-in member
+ */
+export const useUnlinkKakao = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof unlinkKakao>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof unlinkKakao>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getUnlinkKakaoMutationOptions(options), queryClient);
+    }
 
 export const getRegisterMemberUrl = () => {
 

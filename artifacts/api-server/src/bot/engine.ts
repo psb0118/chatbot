@@ -1,5 +1,6 @@
+import { compact, messageQuickReply, webLink } from './replies';
 import { botRules } from './rules';
-import type { BotQuickReply, BotReply } from './types';
+import type { BotReply } from './types';
 
 const normalize = (value: string): string =>
   value.toLowerCase().replace(/\s+/g, ' ').trim();
@@ -42,44 +43,21 @@ const matchesRule = (
     keywordMatches(utterance, keyword, rule.match ?? 'contains'),
   );
 
-const appLink = (appUrl: string | undefined, path: string): string | null => {
-  if (!appUrl) {
-    return null;
-  }
-  const base = appUrl.endsWith('/') ? appUrl.slice(0, -1) : appUrl;
-  return `${base}${path}`;
-};
-
-const webLink = (
-  label: string,
-  appUrl: string | undefined,
-  path: string,
-): BotQuickReply | null => {
-  const url = appLink(appUrl, path);
-  return url ? { label, action: 'webLink', webLinkUrl: url } : null;
-};
-
-const messageQuickReply = (
-  label: string,
-  messageText: string,
-): BotQuickReply => ({ label, action: 'message', messageText });
-
-const compact = (items: Array<BotQuickReply | null>): BotQuickReply[] =>
-  items.filter((item): item is BotQuickReply => item !== null);
-
 const helpReply = (appUrl: string | undefined): BotReply => ({
   text: [
     '플로버 봇 사용법을 안내해 드릴게요.',
-    '• 출석 — 출석 방법과 보상',
-    '• 이벤트 — 진행 중인 이벤트',
+    '• 출석 — 오늘 출석 기록 (연동 후)',
+    '• 내정보 — 내 레벨과 EXP',
+    '• 이벤트 — 진행 중인 이벤트 목록',
+    '• 이벤트참여 <번호> <문구> — 참여 신청',
+    '• 연동 <코드> — 카카오 계정 연결',
     '• 랭킹 — 상위 멤버 보기',
-    '• 멤버 등록 — 웹 가입 안내',
     '궁금한 단어를 그대로 입력해 주세요.',
   ].join('\n'),
   quickReplies: compact([
     messageQuickReply('출석', '출석'),
+    messageQuickReply('내정보', '내정보'),
     messageQuickReply('이벤트', '이벤트'),
-    messageQuickReply('랭킹', '랭킹'),
     webLink('웹에서 열기', appUrl, '/dashboard'),
   ]),
 });

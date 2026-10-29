@@ -7,6 +7,7 @@
     "dev": "node --watch --env-file-if-exists=.env --import tsx src/index.ts",
     "build": "node build.mjs",
     "start": "node --env-file-if-exists=.env dist/index.js",
+    "test": "node --import tsx --test src/lib/*.test.ts src/bot/*.test.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
@@ -23,6 +24,7 @@
     "pino-http": "^10.5.0"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.13",
     "@types/cookie-parser": "^1.4.10",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",

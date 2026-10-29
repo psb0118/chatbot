@@ -10,6 +10,7 @@
   "scripts": {
     "push": "drizzle-kit push",
     "generate": "drizzle-kit generate",
+    "migrate": "drizzle-kit migrate",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {

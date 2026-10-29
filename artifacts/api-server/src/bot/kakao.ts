@@ -46,6 +46,20 @@ export const readUtterance = (payload: unknown): string => {
     : '';
 };
 
+/**
+ * Stable Kakao user identifier (Open Builder `userRequest.user.id`).
+ * This is the key stored on a member to link the chat account.
+ */
+export const readBotUserKey = (payload: unknown): string | null => {
+  if (typeof payload !== 'object' || payload === null) {
+    return null;
+  }
+
+  const user = (payload as KakaoSkillPayload).userRequest?.user;
+  const id = typeof user?.id === 'string' ? user.id.trim() : '';
+  return id.length > 0 ? id : null;
+};
+
 export const toKakaoResponse = (reply: BotReply): KakaoSkillResponse => {
   const text = reply.text.slice(0, MAX_TEXT_LENGTH);
   const quickReplies = reply.quickReplies?.slice(0, MAX_QUICK_REPLIES);

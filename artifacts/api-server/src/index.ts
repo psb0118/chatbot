@@ -1,5 +1,5 @@
 import { clerkMiddleware } from '@clerk/express';
-import { pool } from '@workspace/db';
+import { closePool, isDatabaseConfigured } from '@workspace/db';
 import cookieParser from 'cookie-parser';
 import cors from 'cors';
 import express from 'express';
@@ -26,10 +26,17 @@ if (config.corsOrigins.length > 0) {
 app.use(express.json({ limit: '1mb' }));
 app.use(cookieParser());
 
-// Health stays unauthenticated so deployments can probe it before Clerk is set up.
+// Health stays unauthenticated so deployments can probe it before Clerk or a
+// database is configured. Importing @workspace/db no longer connects eagerly.
 app.get('/api/healthz', (_request, response) => {
   response.json({ status: 'ok' });
 });
+
+if (!isDatabaseConfigured()) {
+  logger.warn(
+    'DATABASE_URL is not set. Data routes and Kakao attendance will fail until it is configured.',
+  );
+}
 
 // Kakao Open Builder calls this server-to-server, before any Clerk session.
 app.use('/api', kakaoRouter);
@@ -74,7 +81,7 @@ const server = app.listen(config.port, '0.0.0.0', () => {
 
 const shutdown = (): void => {
   server.close(() => {
-    void pool.end().finally(() => process.exit(0));
+    void closePool().finally(() => process.exit(0));
   });
 };
 

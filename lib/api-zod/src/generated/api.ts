@@ -30,6 +30,44 @@ export const GetMyMemberResponse = zod.object({
   "displayName": zod.string(),
   "openChatNickname": zod.string().nullable(),
   "linkStatus": zod.enum(['unlinked', 'pending', 'verified']),
+  "kakaoLinked": zod.boolean(),
+  "level": zod.number().int(),
+  "exp": zod.number().int(),
+  "totalExp": zod.number().int(),
+  "tier": zod.string(),
+  "status": zod.enum(['active', 'inactive']),
+  "joinedAt": zod.coerce.date()
+}),zod.null()])
+})
+
+
+/**
+ * @summary Issue a one-time KakaoTalk linking code
+ */
+export const issueKakaoLinkCodeResponseCodeRegExp = new RegExp('^[A-HJ-NP-Z2-9]{6}$');
+
+
+export const IssueKakaoLinkCodeResponse = zod.object({
+  "code": zod.string().regex(issueKakaoLinkCodeResponseCodeRegExp),
+  "expiresAt": zod.coerce.date(),
+  "expiresInMinutes": zod.number().int()
+})
+
+
+/**
+ * @summary Remove the KakaoTalk link from the signed-in member
+ */
+export const unlinkKakaoResponseMemberOneMemberNumberRegExp = new RegExp('^[0-9]{6}$');
+
+
+export const UnlinkKakaoResponse = zod.object({
+  "member": zod.union([zod.object({
+  "id": zod.number().int(),
+  "memberNumber": zod.string().regex(unlinkKakaoResponseMemberOneMemberNumberRegExp),
+  "displayName": zod.string(),
+  "openChatNickname": zod.string().nullable(),
+  "linkStatus": zod.enum(['unlinked', 'pending', 'verified']),
+  "kakaoLinked": zod.boolean(),
   "level": zod.number().int(),
   "exp": zod.number().int(),
   "totalExp": zod.number().int(),
@@ -63,6 +101,7 @@ export const RegisterMemberResponse = zod.object({
   "displayName": zod.string(),
   "openChatNickname": zod.string().nullable(),
   "linkStatus": zod.enum(['unlinked', 'pending', 'verified']),
+  "kakaoLinked": zod.boolean(),
   "level": zod.number().int(),
   "exp": zod.number().int(),
   "totalExp": zod.number().int(),
@@ -88,6 +127,7 @@ export const GetDashboardResponse = zod.object({
   "displayName": zod.string(),
   "openChatNickname": zod.string().nullable(),
   "linkStatus": zod.enum(['unlinked', 'pending', 'verified']),
+  "kakaoLinked": zod.boolean(),
   "level": zod.number().int(),
   "exp": zod.number().int(),
   "totalExp": zod.number().int(),
@@ -105,7 +145,7 @@ export const GetDashboardResponse = zod.object({
   "tier": zod.string(),
   "rank": zod.number().int()
 })),
-  "kakaoIntegration": zod.enum(['waiting'])
+  "kakaoIntegration": zod.enum(['available', 'linked'])
 })
 
 
@@ -161,6 +201,7 @@ export const ClaimAttendanceResponse = zod.object({
   "displayName": zod.string(),
   "openChatNickname": zod.string().nullable(),
   "linkStatus": zod.enum(['unlinked', 'pending', 'verified']),
+  "kakaoLinked": zod.boolean(),
   "level": zod.number().int(),
   "exp": zod.number().int(),
   "totalExp": zod.number().int(),
@@ -259,6 +300,7 @@ export const ListAdminMembersResponseItem = zod.object({
   "displayName": zod.string(),
   "openChatNickname": zod.string().nullable(),
   "linkStatus": zod.enum(['unlinked', 'pending', 'verified']),
+  "kakaoLinked": zod.boolean(),
   "level": zod.number().int(),
   "exp": zod.number().int(),
   "totalExp": zod.number().int(),
@@ -296,6 +338,7 @@ export const UpdateAdminMemberResponse = zod.object({
   "displayName": zod.string(),
   "openChatNickname": zod.string().nullable(),
   "linkStatus": zod.enum(['unlinked', 'pending', 'verified']),
+  "kakaoLinked": zod.boolean(),
   "level": zod.number().int(),
   "exp": zod.number().int(),
   "totalExp": zod.number().int(),

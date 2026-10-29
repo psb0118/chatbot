@@ -26,6 +26,7 @@ export * from './eventInputSlot';
 export * from './eventSlot';
 export * from './experienceEntry';
 export * from './healthStatus';
+export * from './kakaoLinkCode';
 export * from './leaderboardResponse';
 export * from './listAdminAttendanceParams';
 export * from './listAdminEventClaimsParams';
