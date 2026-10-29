@@ -1,0 +1,529 @@
+openapi: 3.1.0
+info:
+  # Do not change the title, if the title changes, the import paths will be broken
+  title: Api
+  version: 0.1.0
+  description: API for the Flober Bot fan community member and attendance manager
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+    description: Health operations
+  - name: members
+    description: Member account and profile operations
+  - name: community
+    description: Dashboard, attendance, and event participation
+  - name: admin
+    description: Administrator-only management operations
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      description: Returns server health status
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+  /members/me:
+    get:
+      operationId: getMyMember
+      tags: [members]
+      summary: Get the signed-in member profile
+      responses:
+        "200":
+          description: Current registration state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MyMemberResponse"
+  /members:
+    post:
+      operationId: registerMember
+      tags: [members]
+      summary: Register a member for the signed-in account
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MemberRegistrationInput"
+      responses:
+        "201":
+          description: Member registered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Member"
+        "409":
+          description: Account or open-chat nickname is already linked
+  /dashboard:
+    get:
+      operationId: getDashboard
+      tags: [community]
+      summary: Get the community dashboard
+      responses:
+        "200":
+          description: Dashboard totals and current member status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Dashboard"
+  /leaderboard:
+    get:
+      operationId: getLeaderboard
+      tags: [community]
+      summary: Get the top ten members
+      responses:
+        "200":
+          description: Ranked members
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LeaderboardResponse"
+  /attendance:
+    get:
+      operationId: listMyAttendance
+      tags: [community]
+      summary: List the signed-in member's attendance records
+      responses:
+        "200":
+          description: Recent attendance records for the signed-in member
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AttendanceRecord"
+    post:
+      operationId: claimAttendance
+      tags: [community]
+      summary: Claim today's attendance reward
+      responses:
+        "200":
+          description: Attendance result; duplicate requests do not grant another reward
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AttendanceResult"
+  /events:
+    get:
+      operationId: listEvents
+      tags: [community]
+      summary: List active scheduled events
+      responses:
+        "200":
+          description: Event schedules
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Event"
+  /events/claims/me:
+    get:
+      operationId: listMyEventClaims
+      tags: [community]
+      summary: List the signed-in member's event claims
+      responses:
+        "200":
+          description: Event claims for the signed-in member
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/EventClaim"
+  /events/claims:
+    post:
+      operationId: submitEventClaim
+      tags: [community]
+      summary: Submit a manual event claim for administrator review
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EventClaimInput"
+      responses:
+        "201":
+          description: Claim submitted for administrator review
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EventClaim"
+        "400":
+          description: Phrase or scheduled time is not valid
+        "409":
+          description: A claim already exists for this member and event today
+  /admin/members:
+    get:
+      operationId: listAdminMembers
+      tags: [admin]
+      summary: Search and list members
+      parameters:
+        - name: search
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Matching members
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Member"
+  /admin/members/{id}:
+    patch:
+      operationId: updateAdminMember
+      tags: [admin]
+      summary: Update member details and account-link status
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminMemberUpdate"
+      responses:
+        "200":
+          description: Updated member
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Member"
+  /admin/members/{id}/history:
+    get:
+      operationId: getAdminMemberHistory
+      tags: [admin]
+      summary: Get a member's attendance, event, and experience history
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Member history
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MemberHistory"
+  /admin/attendance:
+    get:
+      operationId: listAdminAttendance
+      tags: [admin]
+      summary: List attendance records
+      parameters:
+        - name: date
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Attendance records, most recent first
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AttendanceRecord"
+  /admin/events:
+    post:
+      operationId: createAdminEvent
+      tags: [admin]
+      summary: Create a scheduled event
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EventInput"
+      responses:
+        "201":
+          description: Event created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Event"
+  /admin/events/{id}:
+    patch:
+      operationId: updateAdminEvent
+      tags: [admin]
+      summary: Update a scheduled event
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EventInput"
+      responses:
+        "200":
+          description: Updated event
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Event"
+  /admin/event-claims:
+    get:
+      operationId: listAdminEventClaims
+      tags: [admin]
+      summary: List event claims awaiting review
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [pending, approved, rejected]
+      responses:
+        "200":
+          description: Event claims
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/EventClaim"
+  /admin/event-claims/{id}/review:
+    post:
+      operationId: reviewAdminEventClaim
+      tags: [admin]
+      summary: Approve or reject an event claim
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EventClaimReviewInput"
+      responses:
+        "200":
+          description: Reviewed claim
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EventClaim"
+        "409":
+          description: Claim has already been reviewed
+  /admin/logs:
+    get:
+      operationId: listAdminLogs
+      tags: [admin]
+      summary: List important administrator actions
+      responses:
+        "200":
+          description: Latest administrator actions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AdminLog"
+components:
+  schemas:
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+      required:
+        - status
+    Member:
+      type: object
+      required: [id, memberNumber, displayName, openChatNickname, linkStatus, level, exp, totalExp, tier, status, joinedAt]
+      properties:
+        id: { type: integer }
+        memberNumber: { type: string, pattern: "^[0-9]{6}$" }
+        displayName: { type: string }
+        openChatNickname: { type: ["string", "null"] }
+        linkStatus: { type: string, enum: [unlinked, pending, verified] }
+        level: { type: integer }
+        exp: { type: integer }
+        totalExp: { type: integer }
+        tier: { type: string }
+        status: { type: string, enum: [active, inactive] }
+        joinedAt: { type: string, format: date-time }
+    MemberRanking:
+      type: object
+      required: [memberNumber, displayName, level, exp, totalExp, tier, rank]
+      properties:
+        memberNumber: { type: string, pattern: "^[0-9]{6}$" }
+        displayName: { type: string }
+        level: { type: integer }
+        exp: { type: integer }
+        totalExp: { type: integer }
+        tier: { type: string }
+        rank: { type: integer }
+    MyMemberResponse:
+      type: object
+      required: [member]
+      properties:
+        member:
+          oneOf:
+            - $ref: "#/components/schemas/Member"
+            - type: "null"
+    MemberRegistrationInput:
+      type: object
+      required: [displayName, openChatNickname]
+      properties:
+        displayName: { type: string, minLength: 1, maxLength: 40 }
+        openChatNickname: { type: string, minLength: 1, maxLength: 40 }
+    Dashboard:
+      type: object
+      required: [memberCount, todayAttendanceCount, currentMember, attendedToday, topMembers, kakaoIntegration]
+      properties:
+        memberCount: { type: integer }
+        todayAttendanceCount: { type: integer }
+        currentMember:
+          oneOf:
+            - $ref: "#/components/schemas/Member"
+            - type: "null"
+        attendedToday: { type: boolean }
+        topMembers:
+          type: array
+          items:
+            $ref: "#/components/schemas/MemberRanking"
+        kakaoIntegration: { type: string, enum: [waiting] }
+    LeaderboardResponse:
+      type: array
+      items:
+        $ref: "#/components/schemas/MemberRanking"
+    AttendanceResult:
+      type: object
+      required: [claimed, expGranted, attendanceDate, member]
+      properties:
+        claimed: { type: boolean }
+        expGranted: { type: integer }
+        attendanceDate: { type: string, pattern: "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" }
+        member:
+          oneOf:
+            - $ref: "#/components/schemas/Member"
+            - type: "null"
+    AttendanceRecord:
+      type: object
+      required: [id, memberNumber, displayName, attendanceDate, expGranted, createdAt]
+      properties:
+        id: { type: integer }
+        memberNumber: { type: string, pattern: "^[0-9]{6}$" }
+        displayName: { type: string }
+        attendanceDate: { type: string, format: date }
+        expGranted: { type: integer }
+        createdAt: { type: string, format: date-time }
+    Event:
+      type: object
+      required: [id, name, slot, acceptedPhrase, eventTime, rewardExp, active]
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        slot: { type: string, enum: [morning, afternoon, midnight] }
+        acceptedPhrase: { type: string }
+        eventTime: { type: string, pattern: "^([01][0-9]|2[0-3]):[0-5][0-9]$" }
+        rewardExp: { type: integer }
+        active: { type: boolean }
+    EventInput:
+      type: object
+      required: [name, slot, acceptedPhrase, eventTime, rewardExp, active]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 80 }
+        slot: { type: string, enum: [morning, afternoon, midnight] }
+        acceptedPhrase: { type: string, minLength: 1, maxLength: 120 }
+        eventTime: { type: string, pattern: "^([01][0-9]|2[0-3]):[0-5][0-9]$" }
+        rewardExp: { type: integer, minimum: 1, maximum: 10000 }
+        active: { type: boolean }
+    EventClaim:
+      type: object
+      required: [id, memberNumber, displayName, eventId, eventName, slot, eventDate, submittedPhrase, status, submittedAt, reviewNote]
+      properties:
+        id: { type: integer }
+        memberNumber: { type: string, pattern: "^[0-9]{6}$" }
+        displayName: { type: string }
+        eventId: { type: integer }
+        eventName: { type: string }
+        slot: { type: string, enum: [morning, afternoon, midnight] }
+        eventDate: { type: string, pattern: "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" }
+        submittedPhrase: { type: string }
+        status: { type: string, enum: [pending, approved, rejected] }
+        submittedAt: { type: string, format: date-time }
+        reviewNote: { type: ["string", "null"] }
+    EventClaimInput:
+      type: object
+      required: [eventId, phrase]
+      properties:
+        eventId: { type: integer }
+        phrase: { type: string, minLength: 1, maxLength: 120 }
+    EventClaimReviewInput:
+      type: object
+      required: [decision, note]
+      properties:
+        decision: { type: string, enum: [approved, rejected] }
+        note: { type: string, maxLength: 500 }
+    AdminMemberUpdate:
+      type: object
+      required: [displayName, openChatNickname, linkStatus, status]
+      properties:
+        displayName: { type: string, minLength: 1, maxLength: 40 }
+        openChatNickname: { type: ["string", "null"] }
+        linkStatus: { type: string, enum: [unlinked, pending, verified] }
+        status: { type: string, enum: [active, inactive] }
+    ExperienceEntry:
+      type: object
+      required: [id, amount, reason, createdAt]
+      properties:
+        id: { type: integer }
+        amount: { type: integer }
+        reason: { type: string }
+        createdAt: { type: string, format: date-time }
+    MemberHistory:
+      type: object
+      required: [attendance, experience, eventClaims]
+      properties:
+        attendance:
+          type: array
+          items:
+            $ref: "#/components/schemas/AttendanceRecord"
+        experience:
+          type: array
+          items:
+            $ref: "#/components/schemas/ExperienceEntry"
+        eventClaims:
+          type: array
+          items:
+            $ref: "#/components/schemas/EventClaim"
+    AdminLog:
+      type: object
+      required: [id, actor, action, target, details, createdAt]
+      properties:
+        id: { type: integer }
+        actor: { type: string }
+        action: { type: string }
+        target: { type: string }
+        details: { type: string }
+        createdAt: { type: string, format: date-time }
+
