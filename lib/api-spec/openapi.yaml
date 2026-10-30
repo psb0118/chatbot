@@ -46,10 +46,10 @@ paths:
     post:
       operationId: issueKakaoLinkCode
       tags: [members]
-      summary: Issue a one-time KakaoTalk linking code
+      summary: Get the member's permanent KakaoTalk linking code
       responses:
         "200":
-          description: One-time code to send from KakaoTalk
+          description: Code that stays valid for the member's lifetime
           content:
             application/json:
               schema:
@@ -420,11 +420,9 @@ components:
             - type: "null"
     KakaoLinkCode:
       type: object
-      required: [code, expiresAt, expiresInMinutes]
+      required: [code]
       properties:
         code: { type: string, pattern: "^[A-HJ-NP-Z2-9]{6}$" }
-        expiresAt: { type: string, format: date-time }
-        expiresInMinutes: { type: integer }
     MemberRegistrationInput:
       type: object
       required: [displayName, openChatNickname]

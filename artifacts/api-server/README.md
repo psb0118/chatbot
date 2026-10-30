@@ -54,11 +54,11 @@ session.
   `503`; non-admin users receive `403`.
 - Every administrator mutation writes an `admin_logs` row in the same
   transaction as the change.
-- **Kakao link codes** are six characters, single-use and valid for 15 minutes.
-  Redeeming one attaches `kakao_user_key` to the member that issued the code, so
-  a leaked code costs the victim at most one attendance on a member they do not
-  own; they can unlink on the web and issue a new code. There is deliberately no
-  second approval step.
+- **Kakao link codes** are six characters and permanent: a member gets one code
+  at sign-up and keeps it for good. Redeeming is never consumed and never
+  expires, so `연동 <코드>` works again after `연동해제`. A leaked code costs the
+  victim at most one attendance on a member they do not own; there is
+  deliberately no second approval step.
 - **Banning** is done by setting the member's `status` to `inactive`: the bot and
   the member APIs then answer `403`. Link and unlink events are not written to
   `admin_logs` and no link timestamp is stored, so bans rely on operator
@@ -116,7 +116,7 @@ synchronous and answers immediately.
 
 ### Replies
 
-- Built-in: 인사, 도움말, 출석, 이벤트, 랭킹, 멤버 등록, unknown fallback.
+- Built-in: 인사, 도움말, 가입, 출석, 이벤트, 랭킹, 멤버 등록, unknown fallback.
 - FAQ rules: edit `src/bot/rules.ts` (keywords, reply, contains/exact).
 - Rules run before built-ins and the first match wins.
 - Response shape: `{ version: "2.0", template: { outputs: [{ simpleText }], quickReplies } }`.
@@ -126,16 +126,18 @@ synchronous and answers immediately.
 The bot stores the Kakao `userRequest.user.id` (botUserKey) on the member, so the
 same daily attendance rules apply in chat and on the web.
 
-1. The member signs in and presses **연동 코드 발급** on the dashboard.
-   `POST /api/members/me/kakao/link-code` returns a 6-character code (no `0/1/I/O`)
-   that expires after 15 minutes.
-2. The member sends `연동 ABC234` in the KakaoTalk channel. The code is single
-   use and is cleared in the same transaction that stores the botUserKey.
-3. `POST /api/members/me/kakao` (or `DELETE /api/members/me/kakao`) unlinks from
-   the web; `연동해제` unlinks from chat.
+1. The member sends `!가입` in the KakaoTalk channel. The bot registers the chat
+   account and replies with a permanent 6-character code (no `0/1/I/O`).
+2. `POST /api/members/me/kakao/link-code` returns the same code to a signed-in
+   member, so the dashboard and the chat always show one code per member.
+3. `연동 ABC234` links a chat account to the member that owns the code. The code
+   is never consumed and never expires, so it still works after `연동해제`.
+4. `DELETE /api/members/me/kakao` unlinks from the web; `연동해제` unlinks from
+   chat. Both keep the code.
 
 | Command | Behaviour |
 | --- | --- |
+| `!가입` | Registers the chat account and replies with its permanent link code. Safe to repeat. |
 | `출석`, `출석체크`, `체크인` | Linked: records today's attendance (+50 EXP) and reports EXP/level. Unlinked: sends the linking guide. |
 | `연동 <코드>` | Links the chat account to the member that owns the code. |
 | `연동해제` | Removes the link for this chat account. |

@@ -9,6 +9,4 @@
 export interface KakaoLinkCode {
   /** @pattern ^[A-HJ-NP-Z2-9]{6}$ */
   code: string;
-  expiresAt: Date;
-  expiresInMinutes: number;
 }

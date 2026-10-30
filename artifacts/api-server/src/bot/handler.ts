@@ -12,8 +12,8 @@ import { submitEventClaim } from '../lib/event-claims';
 import { HttpError } from '../lib/errors';
 import {
   findMemberByKakaoUserKey,
-  LINK_CODE_TTL_MINUTES,
   redeemLinkCode,
+  registerKakaoMember,
   unlinkKakaoAccount,
 } from '../lib/kakao-link';
 import { tierForLevel } from '../lib/progression';
@@ -24,6 +24,7 @@ import type { BotReply } from './types';
 const normalize = (value: string): string =>
   value.toLowerCase().replace(/\s+/g, ' ').trim();
 
+const JOIN_COMMAND = /^!?\s*가입$/;
 const LINK_COMMAND = /^연동\s*(.*)$/;
 const UNLINK_COMMAND = /^(연동 ?해제|카카오 ?연동 ?해제)$/;
 const MY_INFO_COMMAND = /^(내 ?정보|내정보|프로필)$/;
@@ -32,9 +33,10 @@ const EVENT_LIST_COMMAND = /^(이벤트|이벤트 ?목록)$/;
 const EVENT_CLAIM_COMMAND = /^이벤트 ?참여\s+(\d+)\s+(.+)$/;
 
 const linkGuide = (appUrl: string | undefined): BotReply => ({
-  text: `카카오 연동이 필요해요. 웹 대시보드에서 연동 코드를 발급한 뒤 "연동 ABC234"처럼 보내 주세요. 코드는 ${LINK_CODE_TTL_MINUTES}분간 유효해요.`,
+  text: '카카오 연동이 필요해요. 채팅에서 "!가입"을 입력하면 가입과 동시에 연동 코드를 알려드려요. 이미 코드가 있다면 "연동 ABC234"처럼 보내 주세요. 코드는 계속 유효해요.',
   quickReplies: compact([
-    webLink('연동 코드 발급', appUrl, '/dashboard'),
+    messageQuickReply('!가입', '!가입'),
+    webLink('웹 대시보드', appUrl, '/dashboard'),
     messageQuickReply('도움말', '도움말'),
   ]),
 });
@@ -129,6 +131,39 @@ export const handleBotMessage = async (
     return createBotReply(context.utterance, appUrl);
   }
 
+  if (JOIN_COMMAND.test(utterance)) {
+    if (!botUserKey) {
+      return noChatUserReply();
+    }
+
+    if (!database) {
+      return databaseUnavailableReply(appUrl);
+    }
+
+    const { member, code, created } = await registerKakaoMember(
+      database,
+      botUserKey,
+    );
+
+    return {
+      text: [
+        created ? '가입이 완료됐어요!' : '이미 가입되어 있어요.',
+        `멤버 ${member.memberNumber} · ${member.displayName}`,
+        memberStats(member),
+        '',
+        `연동 코드는 ${code} 예요. 이 코드는 계속 그대로 쓸 수 있어요.`,
+        `다른 기기에서 다시 연결할 때는 "연동 ${code}"를 보내 주세요.`,
+        '',
+        '이제 "출석"을 입력하면 매일 출석이 기록돼요.',
+      ].join('\n'),
+      quickReplies: compact([
+        messageQuickReply('출석', '출석'),
+        messageQuickReply('내정보', '내정보'),
+        webLink('내 홈', appUrl, '/dashboard'),
+      ]),
+    };
+  }
+
   if (UNLINK_COMMAND.test(utterance)) {
     if (!botUserKey) {
       return noChatUserReply();
@@ -151,7 +186,12 @@ export const handleBotMessage = async (
     }
 
     return {
-      text: `카카오 연동을 해제했어요. (멤버 ${member.memberNumber} · ${member.displayName})\n다시 연결하려면 웹에서 새 코드를 발급해 주세요.`,
+      text: [
+        `카카오 연동을 해제했어요. (멤버 ${member.memberNumber} · ${member.displayName})`,
+        member.kakaoLinkCode
+          ? `다시 연결하려면 "연동 ${member.kakaoLinkCode}"를 보내 주세요.`
+          : '다시 연결하려면 "!가입"을 입력해 주세요.',
+      ].join('\n'),
       quickReplies: compact([
         webLink('내 홈', appUrl, '/dashboard'),
         messageQuickReply('도움말', '도움말'),
@@ -176,7 +216,7 @@ export const handleBotMessage = async (
     }
 
     try {
-      const member = await redeemLinkCode(database, code, botUserKey, now);
+      const member = await redeemLinkCode(database, code, botUserKey);
 
       return {
         text: [

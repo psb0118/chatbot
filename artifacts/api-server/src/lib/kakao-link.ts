@@ -14,9 +14,10 @@ import { HttpError, isUniqueViolation } from './errors';
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const CODE_PATTERN = /^[A-HJ-NP-Z2-9]{6}$/;
 const CODE_ATTEMPTS = 8;
+const MEMBER_NUMBER_ATTEMPTS = 8;
+const DEFAULT_BOT_DISPLAY_NAME = '카카오 사용자';
 
 export const LINK_CODE_LENGTH = 6;
-export const LINK_CODE_TTL_MINUTES = 15;
 
 /** Uppercases and strips spaces/hyphens so "ab-12 cd" and "AB12CD" match. */
 export const normalizeLinkCode = (value: string): string =>
@@ -33,19 +34,32 @@ export const createLinkCode = (): string =>
 
 export interface LinkCodeResult {
   code: string;
-  expiresAt: Date;
 }
 
 /**
- * Issues a one-time code that the signed-in member can send from KakaoTalk to
- * attach that chat account to their web membership.
+ * Returns the member's link code, creating it the first time.
+ *
+ * The code belongs to the member for good: it never expires and redeeming it
+ * does not consume it, so the same chat account (or a replacement phone) can
+ * re-link at any time with the code the bot showed at sign-up.
  */
 export const issueLinkCode = async (
   database: AppDatabase,
   memberId: number,
-  now: Date = new Date(),
 ): Promise<LinkCodeResult> => {
-  const expiresAt = new Date(now.getTime() + LINK_CODE_TTL_MINUTES * 60_000);
+  const [member] = await database
+    .select()
+    .from(membersTable)
+    .where(eq(membersTable.id, memberId))
+    .limit(1);
+
+  if (!member) {
+    throw new HttpError(404, '멤버를 찾을 수 없습니다.');
+  }
+
+  if (member.kakaoLinkCode) {
+    return { code: member.kakaoLinkCode };
+  }
 
   for (let attempt = 0; attempt < CODE_ATTEMPTS; attempt += 1) {
     const code = createLinkCode();
@@ -53,7 +67,7 @@ export const issueLinkCode = async (
     try {
       const [updated] = await database
         .update(membersTable)
-        .set({ kakaoLinkCode: code, kakaoLinkCodeExpiresAt: expiresAt })
+        .set({ kakaoLinkCode: code, kakaoLinkCodeExpiresAt: null })
         .where(eq(membersTable.id, memberId))
         .returning();
 
@@ -61,7 +75,7 @@ export const issueLinkCode = async (
         throw new HttpError(404, '멤버를 찾을 수 없습니다.');
       }
 
-      return { code, expiresAt };
+      return { code: updated.kakaoLinkCode ?? code };
     } catch (error) {
       if (isUniqueViolation(error, 'members_kakao_link_code_unique')) {
         continue;
@@ -80,21 +94,20 @@ export const issueLinkCode = async (
 /**
  * Attaches `kakaoUserKey` to the member that owns `rawCode`.
  *
- * The code is single use: it is cleared in the same transaction that stores the
- * Kakao key, so replaying it later fails.
+ * The code is permanent, so it stays on the member after a successful link;
+ * only the Kakao key and the link status change.
  */
 export const redeemLinkCode = async (
   database: AppDatabase,
   rawCode: string,
   kakaoUserKey: string,
-  now: Date = new Date(),
 ): Promise<typeof membersTable.$inferSelect> => {
   const code = normalizeLinkCode(rawCode);
 
   if (!isValidLinkCode(code)) {
     throw new HttpError(
       404,
-      '연동 코드를 찾을 수 없습니다. 웹에서 코드를 새로 발급해 주세요.',
+      '연동 코드를 찾을 수 없습니다. 카톡에서 "!가입"을 입력하거나 웹 대시보드에서 코드를 확인해 주세요.',
     );
   }
 
@@ -107,23 +120,7 @@ export const redeemLinkCode = async (
   if (!candidate) {
     throw new HttpError(
       404,
-      '연동 코드를 찾을 수 없습니다. 웹에서 코드를 새로 발급해 주세요.',
-    );
-  }
-
-  if (
-    candidate.kakaoLinkCodeExpiresAt &&
-    candidate.kakaoLinkCodeExpiresAt.getTime() <= now.getTime()
-  ) {
-    // Clear outside the transaction so the cleanup survives the thrown error.
-    await database
-      .update(membersTable)
-      .set({ kakaoLinkCode: null, kakaoLinkCodeExpiresAt: null })
-      .where(eq(membersTable.id, candidate.id));
-
-    throw new HttpError(
-      410,
-      `연동 코드가 만료되었습니다. 웹에서 새 코드를 발급해 주세요. (유효 시간 ${LINK_CODE_TTL_MINUTES}분)`,
+      '연동 코드를 찾을 수 없습니다. 카톡에서 "!가입"을 입력하거나 웹 대시보드에서 코드를 확인해 주세요.',
     );
   }
 
@@ -139,7 +136,7 @@ export const redeemLinkCode = async (
       if (!member) {
         throw new HttpError(
           404,
-          '연동 코드를 찾을 수 없습니다. 웹에서 코드를 새로 발급해 주세요.',
+          '연동 코드를 찾을 수 없습니다. 카톡에서 "!가입"을 입력하거나 웹 대시보드에서 코드를 확인해 주세요.',
         );
       }
 
@@ -176,7 +173,6 @@ export const redeemLinkCode = async (
         .update(membersTable)
         .set({
           kakaoUserKey,
-          kakaoLinkCode: null,
           kakaoLinkCodeExpiresAt: null,
           linkStatus: 'verified',
         })
@@ -195,6 +191,118 @@ export const redeemLinkCode = async (
 
     throw error;
   }
+};
+
+/**
+ * Chat-only members never sign in with Clerk, so their `clerk_user_id` is a
+ * synthetic key derived from the Kakao account. Real Clerk ids always start
+ * with `user_`, so the two namespaces cannot collide.
+ */
+export const botClerkUserId = (kakaoUserKey: string): string =>
+  `kakao:${kakaoUserKey}`;
+
+export interface KakaoSignUpResult {
+  member: typeof membersTable.$inferSelect;
+  code: string;
+  created: boolean;
+}
+
+/**
+ * Registers the chat account that sent `!가입` and returns its permanent code.
+ *
+ * Signing up twice is safe: the same member is returned, so a member who
+ * unlinked with `연동해제` gets their original record back instead of a
+ * duplicate one.
+ */
+export const registerKakaoMember = async (
+  database: AppDatabase,
+  kakaoUserKey: string,
+  displayName: string = DEFAULT_BOT_DISPLAY_NAME,
+): Promise<KakaoSignUpResult> => {
+  const existing = await findMemberByKakaoUserKey(database, kakaoUserKey);
+  if (existing) {
+    const { code } = await issueLinkCode(database, existing.id);
+    return {
+      member: { ...existing, kakaoLinkCode: code },
+      code,
+      created: false,
+    };
+  }
+
+  const [orphan] = await database
+    .select()
+    .from(membersTable)
+    .where(eq(membersTable.clerkUserId, botClerkUserId(kakaoUserKey)))
+    .limit(1);
+
+  if (orphan) {
+    if (orphan.status !== 'active') {
+      throw new HttpError(403, '비활성 상태의 멤버입니다.');
+    }
+
+    const [relinked] = await database
+      .update(membersTable)
+      .set({ kakaoUserKey, linkStatus: 'verified' })
+      .where(eq(membersTable.id, orphan.id))
+      .returning();
+
+    const { code } = await issueLinkCode(database, relinked.id);
+    return {
+      member: { ...relinked, kakaoLinkCode: code },
+      code,
+      created: false,
+    };
+  }
+
+  for (let attempt = 0; attempt < MEMBER_NUMBER_ATTEMPTS; attempt += 1) {
+    try {
+      const [created] = await database
+        .insert(membersTable)
+        .values({
+          memberNumber: String(randomInt(100_000, 1_000_000)),
+          clerkUserId: botClerkUserId(kakaoUserKey),
+          displayName,
+          linkStatus: 'verified',
+          kakaoUserKey,
+          level: 1,
+          exp: 0,
+          totalExp: 0,
+          status: 'active',
+        })
+        .returning();
+
+      const { code } = await issueLinkCode(database, created.id);
+      return {
+        member: { ...created, kakaoLinkCode: code },
+        code,
+        created: true,
+      };
+    } catch (error) {
+      if (isUniqueViolation(error, 'members_member_number_unique')) {
+        continue;
+      }
+
+      // A concurrent `!가입` won the race; fall back to the stored member.
+      if (isUniqueViolation(error)) {
+        const raced = await findMemberByKakaoUserKey(database, kakaoUserKey);
+        if (raced) {
+          const { code } = await issueLinkCode(database, raced.id);
+          return {
+            member: { ...raced, kakaoLinkCode: code },
+            code,
+            created: false,
+          };
+        }
+      }
+
+      throw error;
+    }
+  }
+
+  throw new HttpError(
+    500,
+    '회원 번호를 생성하지 못했습니다. 잠시 후 다시 시도해 주세요.',
+  );
 };
 
 export const findMemberByKakaoUserKey = async (
@@ -219,8 +327,6 @@ export const clearKakaoLink = async (
     .update(membersTable)
     .set({
       kakaoUserKey: null,
-      kakaoLinkCode: null,
-      kakaoLinkCodeExpiresAt: null,
       linkStatus: 'unlinked',
     })
     .where(eq(membersTable.id, memberId))

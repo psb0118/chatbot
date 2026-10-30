@@ -20,8 +20,9 @@ export const membersTable = pgTable(
     linkStatus: text("link_status").notNull().default("pending"),
     /** Kakao Open Builder botUserKey (userRequest.user.id), set after linking. */
     kakaoUserKey: text("kakao_user_key"),
-    /** One-time code shown in the web app and redeemed by sending it in chat. */
+    /** Permanent code issued at sign-up and reused whenever the chat re-links. */
     kakaoLinkCode: text("kakao_link_code"),
+    /** Legacy column kept for older databases; codes no longer expire. */
     kakaoLinkCodeExpiresAt: timestamp("kakao_link_code_expires_at", {
       withTimezone: true,
     }),

@@ -44,7 +44,7 @@ const createMember = async (number = '000777') => {
 };
 
 const linkMember = async (memberId: number, botUserKey: string, now: Date) => {
-  const { code } = await issueLinkCode(context.db, memberId, now);
+  const { code } = await issueLinkCode(context.db, memberId);
   const reply = await handleBotMessage(
     {
       utterance: `연동 ${code.toLowerCase()}`,
@@ -65,10 +65,12 @@ test('unlinked users are guided to the web link code', async () => {
   );
 
   assert.match(reply.text, /연동이 필요해요/);
+
+  const dashboardLink = reply.quickReplies?.find(
+    (quickReply) => quickReply.action === 'webLink',
+  );
   assert.equal(
-    reply.quickReplies?.[0]?.action === 'webLink'
-      ? reply.quickReplies[0].webLinkUrl
-      : null,
+    dashboardLink?.action === 'webLink' ? dashboardLink.webLinkUrl : null,
     `${appUrl}/dashboard`,
   );
 });
@@ -82,6 +84,71 @@ test('linking a code connects the chat account', async () => {
 
   const [stored] = await context.db.select().from(membersTable);
   assert.equal(stored.kakaoUserKey, 'bot-linked');
+});
+
+test('!가입 registers the chat account and returns a permanent code', async () => {
+  const now = new Date('2026-10-29T01:00:00Z');
+  const reply = await handleBotMessage(
+    { utterance: '!가입', botUserKey: 'bot-join', appUrl, now },
+    context.db,
+  );
+
+  assert.match(reply.text, /가입이 완료됐어요/);
+  assert.match(reply.text, /계속 그대로 쓸 수 있어요/);
+
+  const [stored] = await context.db.select().from(membersTable);
+  assert.equal(stored.kakaoUserKey, 'bot-join');
+  assert.ok(stored.kakaoLinkCode);
+  assert.equal(stored.kakaoLinkCodeExpiresAt, null);
+  assert.match(reply.text, new RegExp(stored.kakaoLinkCode as string));
+
+  const again = await handleBotMessage(
+    { utterance: '가입', botUserKey: 'bot-join', appUrl, now },
+    context.db,
+  );
+
+  assert.match(again.text, /이미 가입되어 있어요/);
+  assert.match(again.text, new RegExp(stored.kakaoLinkCode as string));
+
+  const rows = await context.db.select().from(membersTable);
+  assert.equal(rows.length, 1);
+});
+
+test('a member who signed up in chat can check in right away', async () => {
+  const now = new Date('2026-10-29T01:00:00Z');
+  await handleBotMessage(
+    { utterance: '!가입', botUserKey: 'bot-join-checkin', appUrl, now },
+    context.db,
+  );
+
+  const reply = await handleBotMessage(
+    { utterance: '출석', botUserKey: 'bot-join-checkin', appUrl, now },
+    context.db,
+  );
+
+  assert.match(reply.text, /출석 완료/);
+});
+
+test('the permanent code re-links after 연동해제', async () => {
+  const now = new Date('2026-10-29T01:00:00Z');
+  const joinReply = await handleBotMessage(
+    { utterance: '!가입', botUserKey: 'bot-relink', appUrl, now },
+    context.db,
+  );
+  const code = /연동 코드는 ([A-Z2-9]{6})/.exec(joinReply.text)?.[1];
+  assert.ok(code, joinReply.text);
+
+  const unlinkReply = await handleBotMessage(
+    { utterance: '연동해제', botUserKey: 'bot-relink', appUrl, now },
+    context.db,
+  );
+  assert.match(unlinkReply.text, new RegExp(code));
+
+  const relinkReply = await handleBotMessage(
+    { utterance: `연동 ${code}`, botUserKey: 'bot-relink', appUrl, now },
+    context.db,
+  );
+  assert.match(relinkReply.text, /연동이 완료됐어요/);
 });
 
 test('invalid link codes produce a readable error', async () => {

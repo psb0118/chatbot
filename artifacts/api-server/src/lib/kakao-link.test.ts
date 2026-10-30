@@ -13,9 +13,9 @@ import {
   createLinkCode,
   isValidLinkCode,
   issueLinkCode,
-  LINK_CODE_TTL_MINUTES,
   normalizeLinkCode,
   redeemLinkCode,
+  registerKakaoMember,
   unlinkKakaoAccount,
 } from './kakao-link';
 
@@ -68,63 +68,50 @@ test('codes are normalized before validation', () => {
   assert.equal(isValidLinkCode('ABC123'), false);
 });
 
-test('issueLinkCode stores a 15 minute code', async () => {
+test('issueLinkCode keeps one permanent code per member', async () => {
   const member = await createMember('1');
-  const now = new Date('2026-10-29T01:00:00Z');
-  const { code, expiresAt } = await issueLinkCode(context.db, member.id, now);
+  const first = await issueLinkCode(context.db, member.id);
+  const second = await issueLinkCode(context.db, member.id);
 
-  assert.ok(isValidLinkCode(code));
-  assert.equal(
-    expiresAt.getTime(),
-    now.getTime() + LINK_CODE_TTL_MINUTES * 60_000,
-  );
+  assert.ok(isValidLinkCode(first.code));
+  assert.equal(second.code, first.code);
 
   const [stored] = await context.db.select().from(membersTable);
-  assert.equal(stored.kakaoLinkCode, code);
-  assert.equal(stored.kakaoLinkCodeExpiresAt?.getTime(), expiresAt.getTime());
+  assert.equal(stored.kakaoLinkCode, first.code);
+  assert.equal(stored.kakaoLinkCodeExpiresAt, null);
 });
 
-test('redeemLinkCode links the chat account and burns the code', async () => {
+test('redeemLinkCode links the chat account and keeps the code', async () => {
   const member = await createMember('2');
-  const now = new Date('2026-10-29T01:00:00Z');
-  const { code } = await issueLinkCode(context.db, member.id, now);
+  const { code } = await issueLinkCode(context.db, member.id);
 
   const linked = await redeemLinkCode(
     context.db,
     code.toLowerCase(),
     'bot-user-2',
-    now,
   );
 
   assert.equal(linked.id, member.id);
   assert.equal(linked.kakaoUserKey, 'bot-user-2');
   assert.equal(linked.linkStatus, 'verified');
-  assert.equal(linked.kakaoLinkCode, null);
+  assert.equal(linked.kakaoLinkCode, code);
 
-  await expectHttpError(
-    redeemLinkCode(context.db, code, 'bot-user-2', now),
-    404,
-  );
+  // Replaying the same code is a no-op re-link, not an error.
+  const replay = await redeemLinkCode(context.db, code, 'bot-user-2');
+  assert.equal(replay.kakaoUserKey, 'bot-user-2');
 });
 
-test('expired codes are rejected and cleared', async () => {
+test('the same code re-links after an unlink', async () => {
   const member = await createMember('3');
-  const now = new Date('2026-10-29T01:00:00Z');
-  const { code } = await issueLinkCode(context.db, member.id, now);
+  const { code } = await issueLinkCode(context.db, member.id);
+  await redeemLinkCode(context.db, code, 'bot-user-3');
 
-  await expectHttpError(
-    redeemLinkCode(
-      context.db,
-      code,
-      'bot-user-3',
-      new Date(now.getTime() + (LINK_CODE_TTL_MINUTES + 1) * 60_000),
-    ),
-    410,
-  );
+  await unlinkKakaoAccount(context.db, 'bot-user-3');
 
-  const [stored] = await context.db.select().from(membersTable);
-  assert.equal(stored.kakaoLinkCode, null);
-  assert.equal(stored.kakaoUserKey, null);
+  const relinked = await redeemLinkCode(context.db, code, 'bot-user-3');
+  assert.equal(relinked.id, member.id);
+  assert.equal(relinked.kakaoUserKey, 'bot-user-3');
+  assert.equal(relinked.linkStatus, 'verified');
 });
 
 test('unknown codes are rejected', async () => {
@@ -140,47 +127,95 @@ test('unknown codes are rejected', async () => {
 
 test('a member cannot be linked to two chat accounts', async () => {
   const member = await createMember('5');
-  const now = new Date('2026-10-29T01:00:00Z');
-  const first = await issueLinkCode(context.db, member.id, now);
-  await redeemLinkCode(context.db, first.code, 'bot-user-5a', now);
+  const { code } = await issueLinkCode(context.db, member.id);
+  await redeemLinkCode(context.db, code, 'bot-user-5a');
 
-  const second = await issueLinkCode(context.db, member.id, now);
   await expectHttpError(
-    redeemLinkCode(context.db, second.code, 'bot-user-5b', now),
+    redeemLinkCode(context.db, code, 'bot-user-5b'),
     409,
   );
 });
 
 test('one chat account cannot link to two members', async () => {
-  const now = new Date('2026-10-29T01:00:00Z');
   const first = await createMember('6');
   const second = await createMember('7');
 
-  const firstCode = await issueLinkCode(context.db, first.id, now);
-  await redeemLinkCode(context.db, firstCode.code, 'shared-bot-user', now);
+  const firstCode = await issueLinkCode(context.db, first.id);
+  await redeemLinkCode(context.db, firstCode.code, 'shared-bot-user');
 
-  const secondCode = await issueLinkCode(context.db, second.id, now);
+  const secondCode = await issueLinkCode(context.db, second.id);
   await expectHttpError(
-    redeemLinkCode(context.db, secondCode.code, 'shared-bot-user', now),
+    redeemLinkCode(context.db, secondCode.code, 'shared-bot-user'),
     409,
   );
 });
 
 test('unlink removes the link by chat key or member', async () => {
-  const now = new Date('2026-10-29T01:00:00Z');
   const member = await createMember('8');
-  const { code } = await issueLinkCode(context.db, member.id, now);
-  await redeemLinkCode(context.db, code, 'bot-user-8', now);
+  const { code } = await issueLinkCode(context.db, member.id);
+  await redeemLinkCode(context.db, code, 'bot-user-8');
 
   const unlinked = await unlinkKakaoAccount(context.db, 'bot-user-8');
   assert.equal(unlinked?.id, member.id);
   assert.equal(unlinked?.kakaoUserKey, null);
   assert.equal(unlinked?.linkStatus, 'unlinked');
 
-  const relinkedCode = await issueLinkCode(context.db, member.id, now);
-  await redeemLinkCode(context.db, relinkedCode.code, 'bot-user-8b', now);
+  const relinked = await redeemLinkCode(context.db, code, 'bot-user-8b');
+  assert.equal(relinked.kakaoUserKey, 'bot-user-8b');
 
   const cleared = await clearKakaoLink(context.db, member.id);
   assert.equal(cleared.kakaoUserKey, null);
   assert.equal(cleared.linkStatus, 'unlinked');
+  assert.equal(cleared.kakaoLinkCode, code);
+});
+
+test('registerKakaoMember signs the chat account up with a permanent code', async () => {
+  const result = await registerKakaoMember(context.db, 'bot-signup');
+
+  assert.equal(result.created, true);
+  assert.ok(isValidLinkCode(result.code));
+  assert.match(result.member.memberNumber, /^[0-9]{6}$/);
+  assert.equal(result.member.kakaoUserKey, 'bot-signup');
+  assert.equal(result.member.linkStatus, 'verified');
+  assert.equal(result.member.kakaoLinkCode, result.code);
+  assert.equal(result.member.kakaoLinkCodeExpiresAt, null);
+  assert.equal(result.member.level, 1);
+  assert.equal(result.member.totalExp, 0);
+});
+
+test('signing up twice returns the same member and code', async () => {
+  const first = await registerKakaoMember(context.db, 'bot-repeat');
+  const second = await registerKakaoMember(context.db, 'bot-repeat');
+
+  assert.equal(second.created, false);
+  assert.equal(second.member.id, first.member.id);
+  assert.equal(second.code, first.code);
+
+  const rows = await context.db.select().from(membersTable);
+  assert.equal(rows.length, 1);
+});
+
+test('signing up again after unlinking restores the same member', async () => {
+  const first = await registerKakaoMember(context.db, 'bot-return');
+  await unlinkKakaoAccount(context.db, 'bot-return');
+
+  const again = await registerKakaoMember(context.db, 'bot-return');
+
+  assert.equal(again.created, false);
+  assert.equal(again.member.id, first.member.id);
+  assert.equal(again.member.kakaoUserKey, 'bot-return');
+  assert.equal(again.member.linkStatus, 'verified');
+  assert.equal(again.code, first.code);
+
+  const rows = await context.db.select().from(membersTable);
+  assert.equal(rows.length, 1);
+});
+
+test('two chat accounts sign up as two members', async () => {
+  const first = await registerKakaoMember(context.db, 'bot-a');
+  const second = await registerKakaoMember(context.db, 'bot-b');
+
+  assert.notEqual(first.member.id, second.member.id);
+  assert.notEqual(first.member.memberNumber, second.member.memberNumber);
+  assert.notEqual(first.code, second.code);
 });

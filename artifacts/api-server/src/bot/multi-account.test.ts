@@ -64,7 +64,7 @@ const linkAccount = async (
   botUserKey: string,
   now: Date = day1,
 ) => {
-  const { code } = await issueLinkCode(context.db, memberId, now);
+  const { code } = await issueLinkCode(context.db, memberId);
   const reply = await handleBotMessage(
     { utterance: `연동 ${code}`, botUserKey, appUrl, now },
     context.db,
@@ -171,7 +171,7 @@ test('a linked account cannot be attached to a second member', async () => {
   await linkAccount(first.id, 'bot-account-a');
 
   // The same chat account tries to redeem the second member's code.
-  const { code } = await issueLinkCode(context.db, second.id, day1);
+  const { code } = await issueLinkCode(context.db, second.id);
   const rejected = await say('bot-account-a', `연동 ${code}`);
 
   assert.match(rejected.text, /이미 다른 멤버에 연결되어 있습니다/);
@@ -192,7 +192,7 @@ test('a member cannot be attached to a second chat account', async () => {
   const first = await createMember('000111', '가온');
   await linkAccount(first.id, 'bot-account-a');
 
-  const { code } = await issueLinkCode(context.db, first.id, day1);
+  const { code } = await issueLinkCode(context.db, first.id);
   const rejected = await say('bot-account-b', `연동 ${code}`);
 
   assert.match(rejected.text, /이미 다른 카카오 계정에 연결된 멤버입니다/);

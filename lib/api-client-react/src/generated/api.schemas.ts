@@ -61,8 +61,6 @@ export interface MyMemberResponse {
 export interface KakaoLinkCode {
   /** @pattern ^[A-HJ-NP-Z2-9]{6}$ */
   code: string;
-  expiresAt: string;
-  expiresInMinutes: number;
 }
 
 export interface MemberRegistrationInput {

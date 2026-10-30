@@ -9,11 +9,7 @@ import {
   isUniqueViolation,
   requireNonEmptyText,
 } from '../lib/errors';
-import {
-  clearKakaoLink,
-  issueLinkCode,
-  LINK_CODE_TTL_MINUTES,
-} from '../lib/kakao-link';
+import { clearKakaoLink, issueLinkCode } from '../lib/kakao-link';
 import {
   findMemberByClerkId,
   requireMemberByClerkId,
@@ -78,13 +74,9 @@ membersRouter.post(
     const member = await requireMemberByClerkId(
       response.locals.userId as string,
     );
-    const { code, expiresAt } = await issueLinkCode(db, member.id);
+    const { code } = await issueLinkCode(db, member.id);
 
-    response.json({
-      code,
-      expiresAt,
-      expiresInMinutes: LINK_CODE_TTL_MINUTES,
-    });
+    response.json({ code });
   },
 );
 

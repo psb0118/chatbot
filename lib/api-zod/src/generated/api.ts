@@ -42,15 +42,13 @@ export const GetMyMemberResponse = zod.object({
 
 
 /**
- * @summary Issue a one-time KakaoTalk linking code
+ * @summary Get the member's permanent KakaoTalk linking code
  */
 export const issueKakaoLinkCodeResponseCodeRegExp = new RegExp('^[A-HJ-NP-Z2-9]{6}$');
 
 
 export const IssueKakaoLinkCodeResponse = zod.object({
-  "code": zod.string().regex(issueKakaoLinkCodeResponseCodeRegExp),
-  "expiresAt": zod.coerce.date(),
-  "expiresInMinutes": zod.number().int()
+  "code": zod.string().regex(issueKakaoLinkCodeResponseCodeRegExp)
 })
 
 
