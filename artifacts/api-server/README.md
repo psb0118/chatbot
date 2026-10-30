@@ -116,7 +116,7 @@ synchronous and answers immediately.
 
 ### Replies
 
-- Built-in: 인사, 도움말, 가입, 출석, 이벤트, 랭킹, 멤버 등록, unknown fallback.
+- Built-in: 인사, 도움말(사용법), 가입, 출석, 이벤트, 랭킹, 멤버 등록, unknown fallback.
 - FAQ rules: edit `src/bot/rules.ts` (keywords, reply, contains/exact).
 - Rules run before built-ins and the first match wins.
 - Response shape: `{ version: "2.0", template: { outputs: [{ simpleText }], quickReplies } }`.
@@ -135,9 +135,13 @@ same daily attendance rules apply in chat and on the web.
 4. `DELETE /api/members/me/kakao` unlinks from the web; `연동해제` unlinks from
    chat. Both keep the code.
 
+Every command works with and without a leading `!` (`!출석` = `출석`), and
+`!사용법` replies with the list below.
+
 | Command | Behaviour |
 | --- | --- |
 | `!가입` | Registers the chat account and replies with its permanent link code. Safe to repeat. |
+| `!사용법` | Lists every command. |
 | `출석`, `출석체크`, `체크인` | Linked: records today's attendance (+50 EXP) and reports EXP/level. Unlinked: sends the linking guide. |
 | `연동 <코드>` | Links the chat account to the member that owns the code. |
 | `연동해제` | Removes the link for this chat account. |

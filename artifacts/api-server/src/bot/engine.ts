@@ -1,3 +1,4 @@
+import { commandGuide } from './commands';
 import { compact, messageQuickReply, webLink } from './replies';
 import { botRules } from './rules';
 import type { BotReply } from './types';
@@ -42,25 +43,6 @@ const matchesRule = (
   rule.keywords.some((keyword) =>
     keywordMatches(utterance, keyword, rule.match ?? 'contains'),
   );
-
-const helpReply = (appUrl: string | undefined): BotReply => ({
-  text: [
-    '플로버 봇 사용법을 안내해 드릴게요.',
-    '• 출석 — 오늘 출석 기록 (연동 후)',
-    '• 내정보 — 내 레벨과 EXP',
-    '• 이벤트 — 진행 중인 이벤트 목록',
-    '• 이벤트참여 <번호> <문구> — 참여 신청',
-    '• 연동 <코드> — 카카오 계정 연결',
-    '• 랭킹 — 상위 멤버 보기',
-    '궁금한 단어를 그대로 입력해 주세요.',
-  ].join('\n'),
-  quickReplies: compact([
-    messageQuickReply('출석', '출석'),
-    messageQuickReply('내정보', '내정보'),
-    messageQuickReply('이벤트', '이벤트'),
-    webLink('웹에서 열기', appUrl, '/dashboard'),
-  ]),
-});
 
 const attendanceReply = (appUrl: string | undefined): BotReply => ({
   text: '출석은 플로버 웹에서 하루 한 번 기록할 수 있어요. 한국 시간 기준으로 자정에 초기화되고, 하루 +50 EXP가 지급됩니다.',
@@ -130,7 +112,7 @@ export const createBotReply = (
   }
 
   if (includesAny(normalized, ['도움말', '메뉴', '사용법', '기능'])) {
-    return helpReply(appUrl);
+    return commandGuide(appUrl);
   }
 
   if (includesAny(normalized, ['출석', '체크인'])) {

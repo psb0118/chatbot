@@ -265,6 +265,93 @@ test('payloads without a chat user id fall back to a clear message', async () =>
   assert.match(reply.text, /카카오 사용자 정보를 확인할 수 없어요/);
 });
 
+test('every command also works with a ! prefix', async () => {
+  const member = await createMember();
+  const now = new Date('2026-10-29T01:00:00Z');
+  await linkMember(member.id, 'bot-prefix', now);
+
+  const checkin = await handleBotMessage(
+    { utterance: '!출석', botUserKey: 'bot-prefix', appUrl, now },
+    context.db,
+  );
+  assert.match(checkin.text, /출석 완료/);
+
+  const info = await handleBotMessage(
+    { utterance: '!내정보', botUserKey: 'bot-prefix', appUrl, now },
+    context.db,
+  );
+  assert.match(info.text, /000777/);
+
+  const events = await handleBotMessage(
+    { utterance: '!이벤트', botUserKey: 'bot-prefix', appUrl, now },
+    context.db,
+  );
+  assert.match(events.text, /등록된 이벤트가 없어요/);
+
+  const ranking = await handleBotMessage(
+    { utterance: '!랭킹', botUserKey: 'bot-prefix', appUrl, now },
+    context.db,
+  );
+  assert.match(ranking.text, /랭킹/);
+
+  const unlink = await handleBotMessage(
+    { utterance: '!연동해제', botUserKey: 'bot-prefix', appUrl, now },
+    context.db,
+  );
+  assert.match(unlink.text, /연동을 해제했어요/);
+});
+
+test('!연동 links with the same permanent code', async () => {
+  const member = await createMember();
+  const now = new Date('2026-10-29T01:00:00Z');
+  const { code } = await issueLinkCode(context.db, member.id);
+
+  const reply = await handleBotMessage(
+    {
+      utterance: `!연동 ${code.toLowerCase()}`,
+      botUserKey: 'bot-bang-link',
+      appUrl,
+      now,
+    },
+    context.db,
+  );
+
+  assert.match(reply.text, /연동이 완료됐어요/);
+
+  const [stored] = await context.db.select().from(membersTable);
+  assert.equal(stored.kakaoUserKey, 'bot-bang-link');
+});
+
+test('!사용법 lists every command', async () => {
+  const reply = await handleBotMessage(
+    { utterance: '!사용법', botUserKey: 'bot-usage', appUrl },
+    context.db,
+  );
+
+  for (const command of [
+    '!가입',
+    '!출석',
+    '!내정보',
+    '!랭킹',
+    '!이벤트',
+    '!이벤트참여',
+    '!연동',
+    '!연동해제',
+    '!사용법',
+  ]) {
+    assert.ok(reply.text.includes(command), command);
+  }
+});
+
+test('사용법 without the prefix shows the same list', async () => {
+  const reply = await handleBotMessage(
+    { utterance: '사용법', botUserKey: 'bot-usage-plain', appUrl },
+    context.db,
+  );
+
+  assert.match(reply.text, /!이벤트참여/);
+});
+
 test('unknown utterances still use the static rules', async () => {
   const reply = await handleBotMessage(
     { utterance: '오늘 날씨 어때', botUserKey: 'bot-unknown', appUrl },

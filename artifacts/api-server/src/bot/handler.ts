@@ -17,6 +17,7 @@ import {
   unlinkKakaoAccount,
 } from '../lib/kakao-link';
 import { tierForLevel } from '../lib/progression';
+import { commandGuide } from './commands';
 import { createBotReply } from './engine';
 import { compact, messageQuickReply, webLink } from './replies';
 import type { BotReply } from './types';
@@ -24,7 +25,15 @@ import type { BotReply } from './types';
 const normalize = (value: string): string =>
   value.toLowerCase().replace(/\s+/g, ' ').trim();
 
-const JOIN_COMMAND = /^!?\s*가입$/;
+/**
+ * Strips a leading `!` (or full-width `！`) so every command works with and
+ * without the prefix: `!출석` and `출석` reach the same branch.
+ */
+const stripCommandPrefix = (value: string): string =>
+  value.replace(/^[!！]\s*/, '');
+
+const USAGE_COMMAND = /^(사용법|명령어|명령어 ?목록|help)$/;
+const JOIN_COMMAND = /^가입$/;
 const LINK_COMMAND = /^연동\s*(.*)$/;
 const UNLINK_COMMAND = /^(연동 ?해제|카카오 ?연동 ?해제)$/;
 const MY_INFO_COMMAND = /^(내 ?정보|내정보|프로필)$/;
@@ -122,13 +131,17 @@ export const handleBotMessage = async (
   context: BotMessageContext,
   database: AppDatabase | null = isDatabaseConfigured() ? db : null,
 ): Promise<BotReply> => {
-  const utterance = normalize(context.utterance);
+  const utterance = stripCommandPrefix(normalize(context.utterance));
   const appUrl = context.appUrl;
   const now = context.now ?? new Date();
   const botUserKey = context.botUserKey;
 
   if (!utterance) {
     return createBotReply(context.utterance, appUrl);
+  }
+
+  if (USAGE_COMMAND.test(utterance)) {
+    return commandGuide(appUrl);
   }
 
   if (JOIN_COMMAND.test(utterance)) {
@@ -324,7 +337,7 @@ export const handleBotMessage = async (
 
   if (EVENT_LIST_COMMAND.test(utterance)) {
     if (!database) {
-      return createBotReply(context.utterance, appUrl);
+      return createBotReply(utterance, appUrl);
     }
 
     return eventListReply(database, appUrl);
@@ -381,5 +394,5 @@ export const handleBotMessage = async (
     }
   }
 
-  return createBotReply(context.utterance, appUrl);
+  return createBotReply(utterance, appUrl);
 };
