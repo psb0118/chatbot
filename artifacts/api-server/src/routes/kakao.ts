@@ -1,19 +1,9 @@
-import { timingSafeEqual } from 'node:crypto';
-
 import { Router } from 'express';
 
 import { handleBotMessage } from '../bot/handler';
 import { readBotUserKey, readUtterance, toKakaoResponse } from '../bot/kakao';
 import { config } from '../config';
-
-const secretMatches = (provided: string, expected: string): boolean => {
-  const providedBuffer = Buffer.from(provided);
-  const expectedBuffer = Buffer.from(expected);
-  return (
-    providedBuffer.length === expectedBuffer.length &&
-    timingSafeEqual(providedBuffer, expectedBuffer)
-  );
-};
+import { secretMatches } from '../lib/secrets';
 
 export const kakaoRouter: Router = Router();
 

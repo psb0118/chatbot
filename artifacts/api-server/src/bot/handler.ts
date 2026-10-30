@@ -116,6 +116,8 @@ export interface BotMessageContext {
   utterance: string;
   /** Kakao `userRequest.user.id`; null when the payload has no user. */
   botUserKey: string | null;
+  /** Display name used when `!가입` creates the member. */
+  displayName?: string;
   appUrl?: string;
   now?: Date;
 }
@@ -156,6 +158,7 @@ export const handleBotMessage = async (
     const { member, code, created } = await registerKakaoMember(
       database,
       botUserKey,
+      context.displayName,
     );
 
     return {

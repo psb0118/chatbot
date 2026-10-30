@@ -21,5 +21,6 @@ export const config = {
     5,
   ),
   kakaoSkillSecret: process.env.KAKAO_SKILL_SECRET?.trim() ?? '',
+  deviceBridgeSecret: process.env.DEVICE_BRIDGE_SECRET?.trim() ?? '',
   publicAppUrl: process.env.PUBLIC_APP_URL?.trim() || undefined,
 };

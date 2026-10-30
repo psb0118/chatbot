@@ -9,6 +9,7 @@ import pinoHttp from 'pino-http';
 import { config } from './config';
 import { errorHandler } from './lib/errors';
 import { adminRouter } from './routes/admin';
+import { bridgeRouter } from './routes/bridge';
 import { communityRouter } from './routes/community';
 import { kakaoRouter } from './routes/kakao';
 import { membersRouter } from './routes/members';
@@ -38,12 +39,20 @@ if (!isDatabaseConfigured()) {
   );
 }
 
-// Kakao Open Builder calls this server-to-server, before any Clerk session.
+// Kakao Open Builder and device bots call this server-to-server, before any
+// Clerk session.
 app.use('/api', kakaoRouter);
+app.use('/api', bridgeRouter);
 
 if (!config.kakaoSkillSecret) {
   logger.warn(
     'KAKAO_SKILL_SECRET is not set. The Kakao webhook accepts unauthenticated requests.',
+  );
+}
+
+if (!config.deviceBridgeSecret) {
+  logger.warn(
+    'DEVICE_BRIDGE_SECRET is not set. /api/bridge/kakao stays disabled.',
   );
 }
 

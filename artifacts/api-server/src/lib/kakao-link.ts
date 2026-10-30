@@ -217,8 +217,9 @@ export interface KakaoSignUpResult {
 export const registerKakaoMember = async (
   database: AppDatabase,
   kakaoUserKey: string,
-  displayName: string = DEFAULT_BOT_DISPLAY_NAME,
+  displayName?: string,
 ): Promise<KakaoSignUpResult> => {
+  const name = displayName?.trim().slice(0, 40) || DEFAULT_BOT_DISPLAY_NAME;
   const existing = await findMemberByKakaoUserKey(database, kakaoUserKey);
   if (existing) {
     const { code } = await issueLinkCode(database, existing.id);
@@ -261,7 +262,7 @@ export const registerKakaoMember = async (
         .values({
           memberNumber: String(randomInt(100_000, 1_000_000)),
           clerkUserId: botClerkUserId(kakaoUserKey),
-          displayName,
+          displayName: name,
           linkStatus: 'verified',
           kakaoUserKey,
           level: 1,

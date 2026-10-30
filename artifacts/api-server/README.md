@@ -152,6 +152,48 @@ Every command works with and without a leading `!` (`!출석` = `출석`), and
 `출석` only records when the whole utterance is the command, so questions like
 "출석은 어떻게 해?" still get the web guide instead of a surprise check-in.
 
+### Device bot bridge (unofficial automation)
+
+An Android app such as MessengerBot R reads a chat room's notifications and
+sends a reply, so the server exposes `GET|POST /api/bridge/kakao` for it. The
+endpoint is mounted before Clerk and stays **disabled until
+`DEVICE_BRIDGE_SECRET` is set**; send the same value as `?secret=...` or the
+`x-bridge-secret` header. It answers with plain text, not the skill envelope.
+
+```
+GET /api/bridge/kakao?secret=...&room=<room>&sender=<nickname>&text=!출석
+```
+
+The room title and nickname become the chat key (`device:<room>:<sender>`), so
+the same commands work as in the official channel bot. Renaming a nickname or
+joining from another room creates a new member; deactivate or rename the old
+one from the admin screen.
+
+Sample MessengerBot R script:
+
+```js
+const API = 'https://<public-domain>/api/bridge/kakao?secret=<DEVICE_BRIDGE_SECRET>';
+
+function response(room, msg, sender, isGroupChat, replier) {
+  if (!msg.startsWith('!')) return;
+  try {
+    const text = Utils.getWebText(
+      API +
+        '&room=' + encodeURIComponent(room) +
+        '&sender=' + encodeURIComponent(sender) +
+        '&text=' + encodeURIComponent(msg),
+    );
+    replier.reply(String(text).trim());
+  } catch (e) {
+    replier.reply('지금은 처리할 수 없어요. 잠시 후 다시 시도해 주세요.');
+  }
+}
+```
+
+Known limits of this route: it relies on notifications (a muted room produces
+no messages), it cannot see Kakao's stable user id, and running an unofficial
+bot client risks the Kakao account that hosts it.
+
 ### Limits
 
 - Linking requires the server to have a database; without `DATABASE_URL` the bot
