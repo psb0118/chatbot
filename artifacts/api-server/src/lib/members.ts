@@ -1,4 +1,4 @@
-import { asc, db, desc, eq, membersTable } from '@workspace/db';
+import { asc, db, desc, eq, membersTable, type AppDatabase } from '@workspace/db';
 
 import { HttpError } from './errors';
 import { serializeRanking } from './serializers';
@@ -21,8 +21,15 @@ export const requireMemberByClerkId = async (clerkUserId: string) => {
   return member;
 };
 
-export const listTopMembers = async (limit: number) => {
-  const members = await db
+/**
+ * Active members ordered by lifetime EXP. The database can be injected so the
+ * ranking rules are testable against an in-memory database.
+ */
+export const listTopMembers = async (
+  limit: number,
+  database: AppDatabase = db,
+) => {
+  const members = await database
     .select()
     .from(membersTable)
     .where(eq(membersTable.status, 'active'))

@@ -54,6 +54,15 @@ session.
   `503`; non-admin users receive `403`.
 - Every administrator mutation writes an `admin_logs` row in the same
   transaction as the change.
+- **Kakao link codes** are six characters, single-use and valid for 15 minutes.
+  Redeeming one attaches `kakao_user_key` to the member that issued the code, so
+  a leaked code costs the victim at most one attendance on a member they do not
+  own; they can unlink on the web and issue a new code. There is deliberately no
+  second approval step.
+- **Banning** is done by setting the member's `status` to `inactive`: the bot and
+  the member APIs then answer `403`. Link and unlink events are not written to
+  `admin_logs` and no link timestamp is stored, so bans rely on operator
+  observation.
 
 ## Endpoints
 
