@@ -22,12 +22,11 @@
 var CONFIG = {
   DB_NAME: 'flover_data.json',
   NAME_MAX: 20,
-  SINCE_MIN: '2017-01-01',
 
   // 레벨 = [√(EXP / 100)] + 1
   EXP_PER_MESSAGE: 2,
-  MESSAGE_COOLDOWN_MS: 5000,
-  MESSAGE_EXP_DAILY_CAP: 200
+  MESSAGE_COOLDOWN_MS: 1000,
+  TIMETABLE_EXP: 100
 };
 
 // ── 데이터 (여기만 고치면 됩니다) ──────────────────────────────
@@ -43,7 +42,7 @@ var MEMBERS = [
  */
 var SONGS = [
   // 프리데뷔 (2017)
-  { title: '유리구두 (Glass Shoes)', album: '유리구두 · 2017' },
+  { title: '유리구두 (Glass Shoes)', album: '유리구두 · 2017-11-30' },
 
   // 1st Mini 《To. Heart》 (2018-01-24)
   { title: '나에게로 오는 길 (Intro.)', album: 'To. Heart · 2018' },
@@ -134,9 +133,9 @@ var SONGS = [
   { title: '하얀 그리움 (White Memories)', album: '하얀 그리움 · 2025' },
 
   // Japan 1st EP 《LIKE YOU BETTER (Japanese ver.)》 (2026-04-01)
-  { title: 'LIKE YOU BETTER (Japanese ver.)', album: 'Japan 1st EP · 2026' },
-  { title: 'Love=Disaster (Japanese ver.)', album: 'Japan 1st EP · 2026' },
-  { title: 'Sky Runner', album: 'Japan 1st EP · 2026' },
+  { title: 'LIKE YOU BETTER (Japanese ver.)', album: 'Japan 1st EP · 2026-04-01' },
+  { title: 'Love=Disaster (Japanese ver.)', album: 'Japan 1st EP · 2026-04-01' },
+  { title: 'Sky Runner', album: 'Japan 1st EP · 2026-04-01' },
 
   // 2nd Album 《Glow ME》 (2026-07-21)
   { title: 'ETERNAL', album: 'Glow ME · 2026' },
@@ -167,6 +166,31 @@ var EXTRA_COMMANDS = [
   '· !레벨 회원번호 — 그 회원번호의 레벨 보기'
 ];
 
+/**
+ * 시공표 — 정해진 시각(한국 시간)에 그 말을 보내면 1회 적립.
+ * 같은 칸은 하루에 한 번만 인정됩니다. 시각이 다르면 아무 반응도 하지 않습니다.
+ */
+var TIMETABLE = [
+  { code: '새롬시', hour: 1, minute: 7 },
+  { code: '서연시', hour: 1, minute: 22 },
+  { code: '지원시', hour: 3, minute: 20 },
+  { code: '지헌시', hour: 4, minute: 17 },
+  { code: '채영시', hour: 5, minute: 14 },
+  { code: '나경시', hour: 6, minute: 1 },
+  { code: '하영시', hour: 9, minute: 29 },
+  { code: '지선시', hour: 11, minute: 23 },
+  { code: '규리시', hour: 12, minute: 27 },
+  { code: '111', hour: 1, minute: 11 },
+  { code: '222', hour: 2, minute: 22 },
+  { code: '333', hour: 3, minute: 33 },
+  { code: '444', hour: 4, minute: 44 },
+  { code: '555', hour: 5, minute: 55 },
+  { code: '데뷔시', hour: 1, minute: 24 },
+  { code: '약속시', hour: 21, minute: 0 },
+  { code: '0000', hour: 0, minute: 0 },
+  { code: '1111', hour: 11, minute: 11 }
+];
+
 // ── 공통 유틸 ──────────────────────────────────────────────────
 function nowMs() {
   return new Date().getTime();
@@ -180,6 +204,12 @@ function pad2(n) {
 function kstDay(ms) {
   var d = new Date((ms || nowMs()) + 9 * 3600 * 1000);
   return d.getUTCFullYear() + '-' + pad2(d.getUTCMonth() + 1) + '-' + pad2(d.getUTCDate());
+}
+
+/** 한국 시간 기준 { hour, minute } */
+function kstHourMinute(ms) {
+  var d = new Date((ms || nowMs()) + 9 * 3600 * 1000);
+  return { hour: d.getUTCHours(), minute: d.getUTCMinutes() };
 }
 
 /** 레벨 = [√(EXP / 100)] + 1 */
@@ -329,23 +359,15 @@ function addExp(user, amount) {
   user.totalExp = Math.max(0, (user.totalExp || 0) + amount);
 }
 
-/** 채팅으로 EXP를 줍니다. 도배를 막으려고 쿨다운과 하루 상한을 둡니다. */
+/** 채팅 1건당 EXP. 쿨다운만 있고 하루 상한은 없습니다. */
 function recordActivity(db, msg) {
   var user = currentUser(db, msg);
   if (!user) return;
 
   var now = nowMs();
-  var day = kstDay(now);
-
-  if (user.expDay !== day) {
-    user.expDay = day;
-    user.expDayAmount = 0;
-  }
   if (now - (user.lastMessageAt || 0) < CONFIG.MESSAGE_COOLDOWN_MS) return;
-  if ((user.expDayAmount || 0) >= CONFIG.MESSAGE_EXP_DAILY_CAP) return;
 
   user.lastMessageAt = now;
-  user.expDayAmount = (user.expDayAmount || 0) + CONFIG.EXP_PER_MESSAGE;
   addExp(user, CONFIG.EXP_PER_MESSAGE);
 }
 
@@ -358,6 +380,7 @@ function usageText() {
     '💖 !최애 — 내 최애 멤버',
     '🗓️ !입덕 — 내 입덕일',
     '🎵 !추천곡 — 오늘의 추천곡 (전곡 ' + SONGS.length + '곡 중 랜덤)',
+    '⏳ !시공표 — 시공표 목록 (' + TIMETABLE.length + '개 시각)',
     '😍 !최애등록 멤버 — 최애 멤버 등록',
     '🗓 !입덕등록 날짜 — 입덕일 등록 (예: !입덕등록 2021-05-04)',
     '🆔 !이름변경 이름 — 봇에서 부를 이름 변경',
@@ -398,9 +421,8 @@ function handleSignUp(db, msg) {
     fav: '',
     since: '',
     totalExp: 0,
-    expDay: kstDay(),
-    expDayAmount: 0,
-    lastMessageAt: 0
+    lastMessageAt: 0,
+    timeSlots: {}
   };
   db.links[identity] = id;
   saveDb(db);
@@ -506,15 +528,6 @@ function handleSetSince(db, msg, args) {
     say(msg, '날짜를 알아보지 못했어요. 예: !입덕등록 2021-05-04');
     return;
   }
-  if (day > kstDay()) {
-    say(msg, '아직 오지 않은 날짜예요. 오늘(' + kstDay() + ') 이전 날짜로 적어 주세요.');
-    return;
-  }
-  if (day < CONFIG.SINCE_MIN) {
-    say(msg, '입덕일이 너무 이른 것 같아요. ' + CONFIG.SINCE_MIN + ' 이후로 적어 주세요.');
-    return;
-  }
-
   user.since = day;
   saveDb(db);
   say(msg, '🗓️ 입덕일을 ' + day + ' 로 저장했어요!');
@@ -547,6 +560,55 @@ function handleRecommend(db, msg) {
   }
   var song = pick(SONGS);
   say(msg, '🎵 오늘의 추천곡\n' + song.title + ' — fromis_9\n💿 ' + song.album + '\n한 번 들어 보세요 🍀');
+}
+
+// ── 시공표 ─────────────────────────────────────────────────────
+function timeText(slot) {
+  return pad2(slot.hour) + ':' + pad2(slot.minute);
+}
+
+/** 보낸 말이 시공표 칸이면 그 칸, 아니면 null */
+function findSlot(text) {
+  var raw = String(text || '').replace(/\s/g, '');
+  for (var i = 0; i < TIMETABLE.length; i += 1) {
+    if (TIMETABLE[i].code === raw) return TIMETABLE[i];
+  }
+  return null;
+}
+
+function claimSlot(db, msg, slot) {
+  var now = nowMs();
+  var hm = kstHourMinute(now);
+  if (hm.hour !== slot.hour || hm.minute !== slot.minute) return;
+
+  var user = currentUser(db, msg);
+  if (!user) {
+    say(msg, '시공표는 가입한 회원만 받을 수 있어요. "!가입" 을 먼저 보내 주세요.');
+    return;
+  }
+
+  var today = kstDay(now);
+  if (!user.timeSlots) user.timeSlots = {};
+  if (user.timeSlots[slot.code] === today) {
+    say(msg, '⏳ 〈' + slot.code + '〉 은 오늘 이미 받았어요. 내일 다시 만나요 🍀');
+    return;
+  }
+
+  user.timeSlots[slot.code] = today;
+  addExp(user, CONFIG.TIMETABLE_EXP);
+  say(msg, '⏳ 시공표 적중! 〈' + slot.code + '〉 +' + CONFIG.TIMETABLE_EXP + ' EXP\n' +
+    '📈 Lv.' + levelForExp(user.totalExp) + ' · ' + Math.max(0, user.totalExp || 0) + ' EXP');
+}
+
+function handleTimetable(db, msg) {
+  var lines = [
+    '[ 시공표 ]',
+    '정해진 시각에 그 말을 보내면 1회 ' + CONFIG.TIMETABLE_EXP + ' EXP (한국 시간, 칸마다 하루 한 번)'
+  ];
+  for (var i = 0; i < TIMETABLE.length; i += 1) {
+    lines.push('· ' + TIMETABLE[i].code + ' — ' + timeText(TIMETABLE[i]));
+  }
+  return lines.join('\n');
 }
 
 // ── 레벨 ───────────────────────────────────────────────────────
@@ -596,19 +658,28 @@ function handleMessage(msg) {
   if (!msg || typeof msg.content !== 'string') return;
 
   var text = msg.content.replace(/^\s+|\s+$/g, '');
-  if (text.indexOf('!') !== 0 && text.indexOf('！') !== 0) return;
-
-  var body = text.replace(/^[!！]\s*/, '');
-  if (!body) return;
-
-  var parts = body.split(/\s+/);
-  var command = parts[0];
-  var args = parts.slice(1);
+  if (!text) return;
 
   var db = loadDb();
 
   try {
     recordActivity(db, msg);
+
+    // 시공표: "!" 없이, 정해진 시각에 정해진 말을 보내면 적립
+    var slot = findSlot(text);
+    if (slot) {
+      claimSlot(db, msg, slot);
+      return;
+    }
+
+    if (text.indexOf('!') !== 0 && text.indexOf('！') !== 0) return;
+
+    var body = text.replace(/^[!！]\s*/, '');
+    if (!body) return;
+
+    var parts = body.split(/\s+/);
+    var command = parts[0];
+    var args = parts.slice(1);
 
     switch (command) {
       case '가입':
@@ -651,6 +722,10 @@ function handleMessage(msg) {
 
       case '레벨':
         handleLevel(db, msg, args);
+        return;
+
+      case '시공표':
+        say(msg, handleTimetable(db, msg));
         return;
 
       case '사용법':
