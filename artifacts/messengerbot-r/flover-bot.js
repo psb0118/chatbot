@@ -21,17 +21,6 @@
 // ── 설정 ───────────────────────────────────────────────────────
 var CONFIG = {
   DB_NAME: 'flover_data.json',
-
-  EXP_PER_LEVEL: 100,
-  EXP_PER_MESSAGE: 2,
-  MESSAGE_EXP_DAILY_CAP: 200,
-  MESSAGE_COOLDOWN_MS: 5000,
-  ATTENDANCE_EXP: 50,
-  QUIZ_EXP: 30,
-
-  QUIZ_TTL_MS: 10 * 60 * 1000,
-  RANK_LIMIT: 5,
-
   NAME_MAX: 20,
   SINCE_MIN: '2017-01-01'
 };
@@ -42,33 +31,21 @@ var MEMBERS = [
   '이서연', '이채영', '이나경', '백지헌'
 ];
 
-// 추천곡 / 노래 퀴즈에 같이 씁니다. hint 는 정답이 드러나지 않게 적어 주세요.
+// !추천곡 이 여기서 한 곡씩 골라 줍니다.
 var SONGS = [
-  { title: 'Glass Shoes', hint: '데뷔 전 리얼리티의 마지막 무대 곡' },
-  { title: 'To Heart', hint: '정식 데뷔 앨범의 타이틀곡' },
-  { title: 'LOVE BOMB', hint: '두 번째 미니앨범 타이틀곡' },
-  { title: 'FUN!', hint: '여름에 어울리는 세 번째 미니앨범 타이틀곡' },
-  { title: 'Feel Good (SECRET CODE)', hint: '첫 정규앨범 타이틀곡' },
-  { title: 'WE GO', hint: '첫 정규앨범의 수록곡, 여름 시즌 송' }
+  'Glass Shoes',
+  'To Heart',
+  'LOVE BOMB',
+  'FUN!',
+  'Feel Good (SECRET CODE)',
+  'WE GO'
 ];
 
-// 일반 퀴즈: a 는 정답 비교용(공백·대소문자 무시), hint 는 힌트.
-var QUIZZES = [
-  { q: '이 그룹의 데뷔 연도는?', a: '2018', hint: '네 자리 숫자' },
-  { q: '멤버는 모두 몇 명?', a: '9', hint: '한 자리 숫자' },
-  { q: '공식 팬덤 이름은?', a: 'flover', hint: 'F로 시작' },
-  { q: '데뷔 싱글 앨범 제목은?', a: 'glass shoes', hint: '영어 두 단어' }
-];
-
-// 사용법의 "추가 명령어" 칸에 그대로 나옵니다. 한 줄에 하나씩 적으면 됩니다.
-var EXTRA_COMMANDS = [
-  '· !출석 — 오늘 출석 (+' + CONFIG.ATTENDANCE_EXP + ' EXP)',
-  '· !랭킹 — 누적 EXP 상위 ' + CONFIG.RANK_LIMIT + '명',
-  '· !퀴즈 — 일반 퀴즈',
-  '· !노래퀴즈 — 노래 맞히기',
-  '· !힌트 — 진행 중인 퀴즈 힌트',
-  '· !정답 <답> — 정답 제출'
-];
+/**
+ * 사용법의 "추가 명령어" 칸에 그대로 나옵니다. 원하는 만큼 직접 적으면 됩니다.
+ * 형식: '· !명령 — 설명'
+ */
+var EXTRA_COMMANDS = [];
 
 // ── 공통 유틸 ──────────────────────────────────────────────────
 function nowMs() {
@@ -83,30 +60,6 @@ function pad2(n) {
 function kstDay(ms) {
   var d = new Date((ms || nowMs()) + 9 * 3600 * 1000);
   return d.getUTCFullYear() + '-' + pad2(d.getUTCMonth() + 1) + '-' + pad2(d.getUTCDate());
-}
-
-function levelFor(totalExp) {
-  return Math.floor(Math.max(0, totalExp) / CONFIG.EXP_PER_LEVEL) + 1;
-}
-
-function expInLevel(totalExp) {
-  return Math.max(0, totalExp) % CONFIG.EXP_PER_LEVEL;
-}
-
-function tierFor(level) {
-  if (level >= 50) return 'Moon';
-  if (level >= 35) return 'Star';
-  if (level >= 20) return 'Flover';
-  if (level >= 10) return 'Blossom';
-  if (level >= 5) return 'Bloom';
-  return 'Sprout';
-}
-
-/** 정답 비교용 정규화: 소문자, 공백·문장부호 제거 */
-function normalizeAnswer(text) {
-  return String(text || '')
-    .toLowerCase()
-    .replace(/[\s.,!?~'"()\[\]{}·:;\-]/g, '');
 }
 
 /**
@@ -181,7 +134,7 @@ function pick(list) {
 
 // ── 저장소 ─────────────────────────────────────────────────────
 function emptyDb() {
-  return { version: 3, users: {}, links: {}, quizzes: {} };
+  return { version: 4, users: {}, links: {} };
 }
 
 function loadDb() {
@@ -199,10 +152,9 @@ function loadDb() {
   if (!raw || typeof raw !== 'object') return emptyDb();
 
   var db = emptyDb();
-  db.version = raw.version || 3;
+  db.version = raw.version || 4;
   db.users = raw.users && typeof raw.users === 'object' ? raw.users : {};
   db.links = raw.links && typeof raw.links === 'object' ? raw.links : {};
-  db.quizzes = raw.quizzes && typeof raw.quizzes === 'object' ? raw.quizzes : {};
   return db;
 }
 
@@ -225,45 +177,12 @@ function say(msg, text) {
   }
 }
 
-function memberLine(user) {
-  var level = levelFor(user.totalExp);
-  return '✨ Lv.' + level + ' ' + tierFor(level) + ' · ' + user.totalExp + ' EXP';
-}
-
 // ── 사용자 찾기 ────────────────────────────────────────────────
 /** 지금 이 사람에게 연결된 회원. 없으면 null */
 function currentUser(db, msg) {
   var id = db.links[identityOf(msg)];
   if (!id || !db.users[id]) return null;
   return db.users[id];
-}
-
-function addExp(user, amount) {
-  var before = levelFor(user.totalExp);
-  user.totalExp += amount;
-  var after = levelFor(user.totalExp);
-  return { before: before, after: after, up: after > before };
-}
-
-/** 채팅만으로 레벨업하지 않도록 하루 상한과 쿨다운을 둡니다. */
-function recordActivity(db, msg) {
-  var user = currentUser(db, msg);
-  if (!user) return;
-
-  var now = nowMs();
-  var day = kstDay(now);
-
-  if (user.expDay !== day) {
-    user.expDay = day;
-    user.expDayAmount = 0;
-  }
-
-  if (now - (user.lastMessageAt || 0) < CONFIG.MESSAGE_COOLDOWN_MS) return;
-  if (user.expDayAmount >= CONFIG.MESSAGE_EXP_DAILY_CAP) return;
-
-  user.lastMessageAt = now;
-  user.expDayAmount += CONFIG.EXP_PER_MESSAGE;
-  addExp(user, CONFIG.EXP_PER_MESSAGE);
 }
 
 function needUser(db, msg) {
@@ -290,10 +209,12 @@ function usageText() {
     '🎉 !가입 — 회원가입 (회원번호 발급)'
   ];
 
-  if (EXTRA_COMMANDS.length > 0) {
-    lines.push('');
-    lines.push('[ 추가 명령어 ]');
-    lines = lines.concat(EXTRA_COMMANDS);
+  lines.push('');
+  lines.push('[ 추가 명령어 ]');
+  if (EXTRA_COMMANDS.length === 0) {
+    lines.push('· 준비 중이에요');
+  } else {
+    for (var i = 0; i < EXTRA_COMMANDS.length; i += 1) lines.push(EXTRA_COMMANDS[i]);
   }
 
   return lines.join('\n');
@@ -317,17 +238,7 @@ function handleSignUp(db, msg) {
   if (name.length > CONFIG.NAME_MAX) name = name.slice(0, CONFIG.NAME_MAX);
 
   var id = makeMemberId(db);
-  db.users[id] = {
-    name: name,
-    fav: '',
-    since: '',
-    totalExp: 0,
-    attendance: {},
-    createdDay: kstDay(),
-    expDay: kstDay(),
-    expDayAmount: 0,
-    lastMessageAt: 0
-  };
+  db.users[id] = { name: name, fav: '', since: '' };
   db.links[identity] = id;
   saveDb(db);
 
@@ -364,19 +275,17 @@ function handleLink(db, msg, args) {
   say(msg, '🔗 연동 완료 🍀\n👤 이름 : ' + user.name + '\n🆔 회원번호 : ' + code);
 }
 
-// ── 정보 / 최애 / 입덕 ─────────────────────────────────────────
+// ── 정보 / 최애 / 입덕 / 이름 ──────────────────────────────────
 function handleInfo(db, msg) {
   var user = needUser(db, msg);
   if (!user) return;
 
-  var id = db.links[identityOf(msg)];
   var lines = [
     '👤 내 정보',
     '👤 이름 : ' + user.name,
-    '🆔 회원번호 : ' + id,
+    '🆔 회원번호 : ' + db.links[identityOf(msg)],
     '💖 최애 : ' + (user.fav || '아직 없음 (!최애등록 멤버)'),
-    '🗓️ 입덕 : ' + (user.since || '아직 없음 (!입덕등록 날짜)'),
-    memberLine(user)
+    '🗓️ 입덕 : ' + (user.since || '아직 없음 (!입덕등록 날짜)')
   ];
   say(msg, lines.join('\n'));
 }
@@ -472,154 +381,7 @@ function handleRecommend(db, msg) {
     say(msg, '추천곡 목록이 비어 있어요. 스크립트의 SONGS 를 채워 주세요.');
     return;
   }
-  var song = pick(SONGS);
-  say(msg, '🎵 오늘의 추천곡\n' + song.title + ' — fromis_9\n한 번 들어 보세요 🍀');
-}
-
-// ── 퀴즈 ───────────────────────────────────────────────────────
-function startQuiz(db, msg, kind) {
-  var room = msg.room;
-  var question;
-  var answer;
-  var hint;
-  var intro;
-
-  if (kind === 'song') {
-    if (SONGS.length === 0) {
-      say(msg, '노래 목록이 비어 있어요. 스크립트의 SONGS 를 채워 주세요.');
-      return;
-    }
-    question = pick(SONGS);
-    answer = question.title;
-    hint = question.hint || '제목을 맞혀 주세요.';
-    intro = '🎵 노래 퀴즈! 아래 힌트로 노래 제목을 맞혀 주세요.';
-  } else {
-    if (QUIZZES.length === 0) {
-      say(msg, '퀴즈 목록이 비어 있어요. 스크립트의 QUIZZES 를 채워 주세요.');
-      return;
-    }
-    question = pick(QUIZZES);
-    answer = question.a;
-    hint = question.hint || '정답을 맞혀 주세요.';
-    intro = '❓ 퀴즈!';
-  }
-
-  db.quizzes[room] = {
-    answer: answer,
-    question: kind === 'song' ? null : question.q,
-    hint: hint,
-    kind: kind,
-    startedBy: displayNameOf(msg),
-    at: nowMs()
-  };
-
-  var lines = [intro];
-  if (db.quizzes[room].question) lines.push(db.quizzes[room].question);
-  lines.push('힌트: ' + hint);
-  lines.push('정답은 "!정답 <답>" 으로 보내 주세요. (정답 ' + CONFIG.QUIZ_EXP + ' EXP)');
-  say(msg, lines.join('\n'));
-}
-
-function handleHint(db, msg) {
-  var quiz = db.quizzes[msg.room];
-  if (!quiz) {
-    say(msg, '진행 중인 퀴즈가 없어요. "!퀴즈" 또는 "!노래퀴즈" 로 시작해 주세요.');
-    return;
-  }
-
-  var left = Math.round((CONFIG.QUIZ_TTL_MS - (nowMs() - quiz.at)) / 1000);
-  say(msg, '힌트: ' + quiz.hint + (left > 0 ? '\n남은 시간 약 ' + left + '초' : ''));
-}
-
-function answeredQuiz(db, msg, text) {
-  var room = msg.room;
-  var quiz = db.quizzes[room];
-
-  if (!quiz) {
-    say(msg, '진행 중인 퀴즈가 없어요. "!퀴즈" 로 시작해 주세요.');
-    return;
-  }
-
-  if (nowMs() - quiz.at > CONFIG.QUIZ_TTL_MS) {
-    delete db.quizzes[room];
-    saveDb(db);
-    say(msg, '퀴즈 시간이 지나서 종료됐어요. "!퀴즈" 로 다시 시작해 주세요.');
-    return;
-  }
-
-  if (normalizeAnswer(text) !== normalizeAnswer(quiz.answer)) {
-    say(msg, '틀렸어요. 다시 도전하거나 "!힌트" 를 확인해 보세요.');
-    return;
-  }
-
-  var user = currentUser(db, msg);
-  var message = '정답! "' + quiz.answer + '"';
-
-  if (user) {
-    var result = addExp(user, CONFIG.QUIZ_EXP);
-    message += '\n+' + CONFIG.QUIZ_EXP + ' EXP · ' + user.name + ' · ' + memberLine(user);
-    if (result.up) message += '\n레벨 업! Lv.' + result.after + ' ' + tierFor(result.after);
-  } else {
-    message += '\n(가입하면 EXP를 받을 수 있어요: !가입)';
-  }
-
-  delete db.quizzes[room];
-  saveDb(db);
-  say(msg, message);
-}
-
-// ── 출석 / 랭킹 ────────────────────────────────────────────────
-function countThisMonth(attendance, day) {
-  var month = day.slice(0, 7);
-  var count = 0;
-  for (var key in attendance) {
-    if (attendance.hasOwnProperty(key) && key.indexOf(month) === 0) count += 1;
-  }
-  return count;
-}
-
-function handleAttendance(db, msg) {
-  var user = needUser(db, msg);
-  if (!user) return;
-
-  var day = kstDay();
-  if (!user.attendance) user.attendance = {};
-  if (user.attendance[day]) {
-    say(msg, '오늘 출석은 이미 완료했어요. (한국 시간 자정에 초기화)');
-    return;
-  }
-
-  user.attendance[day] = true;
-  var result = addExp(user, CONFIG.ATTENDANCE_EXP);
-  saveDb(db);
-
-  var lines = [
-    '출석 완료! +' + CONFIG.ATTENDANCE_EXP + ' EXP (' + day + ')',
-    user.name + ' · ' + memberLine(user)
-  ];
-  if (result.up) lines.push('레벨 업! Lv.' + result.after + ' ' + tierFor(result.after));
-  lines.push('이번 달 출석 ' + countThisMonth(user.attendance, day) + '회');
-  say(msg, lines.join('\n'));
-}
-
-function handleRanking(db, msg) {
-  var ids = Object.keys(db.users);
-  if (ids.length === 0) {
-    say(msg, '아직 가입자가 없어요. "!가입" 으로 시작해 보세요.');
-    return;
-  }
-
-  ids.sort(function (a, b) {
-    return db.users[b].totalExp - db.users[a].totalExp;
-  });
-
-  var lines = ['[ 누적 EXP 랭킹 ]'];
-  var limit = Math.min(CONFIG.RANK_LIMIT, ids.length);
-  for (var i = 0; i < limit; i += 1) {
-    var user = db.users[ids[i]];
-    lines.push((i + 1) + '. ' + user.name + ' · Lv.' + levelFor(user.totalExp) + ' · ' + user.totalExp + ' EXP');
-  }
-  say(msg, lines.join('\n'));
+  say(msg, '🎵 오늘의 추천곡\n' + pick(SONGS) + ' — fromis_9\n한 번 들어 보세요 🍀');
 }
 
 // ── 명령 처리 ──────────────────────────────────────────────────
@@ -639,9 +401,6 @@ function handleMessage(msg) {
   var db = loadDb();
 
   try {
-    currentUser(db, msg);
-    recordActivity(db, msg);
-
     switch (command) {
       case '가입':
       case '회원가입':
@@ -686,30 +445,6 @@ function handleMessage(msg) {
       case '명령어':
       case 'help':
         say(msg, usageText());
-        return;
-
-      case '출석':
-        handleAttendance(db, msg);
-        return;
-
-      case '랭킹':
-        handleRanking(db, msg);
-        return;
-
-      case '퀴즈':
-        startQuiz(db, msg, 'general');
-        return;
-
-      case '노래퀴즈':
-        startQuiz(db, msg, 'song');
-        return;
-
-      case '힌트':
-        handleHint(db, msg);
-        return;
-
-      case '정답':
-        answeredQuiz(db, msg, args.join(' '));
         return;
 
       default:
