@@ -9,22 +9,18 @@
  * 1. 메신저봇 R → 봇 추가
  * 2. 봇 옵션: "레거시 API 사용" 체크 해제, "통합된 매개변수 사용" 체크 해제
  *    (이 스크립트는 API2 방식이라 bot.addListener 로 메시지를 받습니다)
- * 3. 아래 ADMIN_SETUP_CODE 를 본인만 아는 값으로 바꾸고 전체를 붙여넣기
- * 4. 봇 스위치 ON → 방에서 !도움말
+ * 3. 스크립트 전체를 붙여넣기 → 봇 스위치 ON → 방에서 !사용법
  *
  * ── 주의 ──────────────────────────────────────────────────────
  * · 기록은 폰 안에만 있습니다. 앱을 지우거나 폰을 초기화하면 사라집니다.
- *   !백업 으로 파일을 만들어 두세요(같은 폰 안에 저장됨).
- * · 닉네임을 바꾸면 앱 버전에 따라 다른 사람으로 잡힐 수 있습니다.
+ * · 닉네임을 바꾸면 앱이 msg.author.hash 를 주는 경우에만 같은 사람으로
+ *   이어집니다. 그래서 닉네임을 바꾸기 전에 !정보 로 회원번호를 적어 두고,
+ *   신원이 끊기면 !연동 <회원번호> 로 다시 붙이면 됩니다.
  */
 
 // ── 설정 ───────────────────────────────────────────────────────
 var CONFIG = {
-  // ↓↓↓ 반드시 바꾸세요. 이 값이 그대로면 !관리자등록 이 거부됩니다.
-  ADMIN_SETUP_CODE: 'CHANGE_THIS_TO_YOUR_OWN_SECRET',
-
   DB_NAME: 'flover_data.json',
-  BACKUP_PREFIX: 'flover_backup_',
 
   EXP_PER_LEVEL: 100,
   EXP_PER_MESSAGE: 2,
@@ -34,7 +30,10 @@ var CONFIG = {
   QUIZ_EXP: 30,
 
   QUIZ_TTL_MS: 10 * 60 * 1000,
-  RANK_LIMIT: 5
+  RANK_LIMIT: 5,
+
+  NAME_MAX: 20,
+  SINCE_MIN: '2017-01-01'
 };
 
 // ── 데이터 (여기만 고치면 됩니다) ──────────────────────────────
@@ -43,7 +42,7 @@ var MEMBERS = [
   '이서연', '이채영', '이나경', '백지헌'
 ];
 
-// 노래 퀴즈: hint 는 정답이 드러나지 않게 적어 주세요.
+// 추천곡 / 노래 퀴즈에 같이 씁니다. hint 는 정답이 드러나지 않게 적어 주세요.
 var SONGS = [
   { title: 'Glass Shoes', hint: '데뷔 전 리얼리티의 마지막 무대 곡' },
   { title: 'To Heart', hint: '정식 데뷔 앨범의 타이틀곡' },
@@ -59,6 +58,16 @@ var QUIZZES = [
   { q: '멤버는 모두 몇 명?', a: '9', hint: '한 자리 숫자' },
   { q: '공식 팬덤 이름은?', a: 'flover', hint: 'F로 시작' },
   { q: '데뷔 싱글 앨범 제목은?', a: 'glass shoes', hint: '영어 두 단어' }
+];
+
+// 사용법의 "추가 명령어" 칸에 그대로 나옵니다. 한 줄에 하나씩 적으면 됩니다.
+var EXTRA_COMMANDS = [
+  '· !출석 — 오늘 출석 (+' + CONFIG.ATTENDANCE_EXP + ' EXP)',
+  '· !랭킹 — 누적 EXP 상위 ' + CONFIG.RANK_LIMIT + '명',
+  '· !퀴즈 — 일반 퀴즈',
+  '· !노래퀴즈 — 노래 맞히기',
+  '· !힌트 — 진행 중인 퀴즈 힌트',
+  '· !정답 <답> — 정답 제출'
 ];
 
 // ── 공통 유틸 ──────────────────────────────────────────────────
@@ -101,36 +110,78 @@ function normalizeAnswer(text) {
 }
 
 /**
- * 비밀번호는 그대로 저장하지 않습니다. 다만 이건 로컬 파일을 눈으로 보기
- * 어렵게 만드는 수준이고, 암호학적으로 안전한 해시는 아닙니다.
- */
-function hashPassword(password) {
-  var text = 'flover:' + String(password);
-  var hash = 5381;
-  for (var i = 0; i < text.length; i += 1) {
-    hash = ((hash << 5) + hash + text.charCodeAt(i)) & 0x7fffffff;
-  }
-  return hash.toString(36);
-}
-
-/**
  * 사용자 식별자.
  * 앱이 msg.author.hash 를 주면 그걸 쓰고(0.7.36a+), 없으면 방+닉네임으로
- * 대신합니다. 후자는 닉네임을 바꾸면 새 사람이 됩니다.
+ * 대신합니다. 후자는 닉네임을 바꾸면 새 사람이 되므로 !연동 으로 복구합니다.
  */
 function identityOf(msg) {
   var hash = msg.author ? msg.author.hash : null;
   if (hash) return 'h:' + hash;
-  return 'n:' + msg.room + ':' + (msg.author ? msg.author.name : '알수없음');
+  return 'n:' + msg.room + ':' + ((msg.author && msg.author.name) || '알수없음');
 }
 
 function displayNameOf(msg) {
-  return (msg.author && msg.author.name) || '알수없음';
+  var name = (msg.author && msg.author.name) || '알수없음';
+  return String(name).replace(/^\s+|\s+$/g, '');
+}
+
+/** 멤버 이름 맞추기: 정확히 일치하거나, 한 명으로만 좁혀지는 앞/뒷부분 */
+function matchMember(text) {
+  var raw = String(text || '').replace(/\s/g, '').toLowerCase();
+  if (!raw) return null;
+
+  var exact = null;
+  var partial = [];
+  for (var i = 0; i < MEMBERS.length; i += 1) {
+    var flat = MEMBERS[i].replace(/\s/g, '').toLowerCase();
+    if (flat === raw) exact = MEMBERS[i];
+    else if (flat.indexOf(raw) >= 0) partial.push(MEMBERS[i]);
+  }
+
+  if (exact) return exact;
+  if (partial.length === 1) return partial[0];
+  return null;
+}
+
+/** 2021-05-04, 2021.5.4, 2021/05/04, 20210504 모두 허용 */
+function parseDateInput(text) {
+  var raw = String(text || '').replace(/\s/g, '');
+  var m = raw.match(/^(\d{4})[-./]?(\d{1,2})[-./]?(\d{1,2})$/);
+  if (!m) return null;
+
+  var year = Number(m[1]);
+  var month = Number(m[2]);
+  var day = Number(m[3]);
+  if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+
+  var probe = new Date(Date.UTC(year, month - 1, day));
+  if (probe.getUTCFullYear() !== year ||
+      probe.getUTCMonth() + 1 !== month ||
+      probe.getUTCDate() !== day) {
+    return null;
+  }
+
+  return year + '-' + pad2(month) + '-' + pad2(day);
+}
+
+/** 6자리 회원번호. 이미 쓰는 번호는 건너뜁니다. */
+function makeMemberId(db) {
+  for (var attempt = 0; attempt < 300; attempt += 1) {
+    var id = String(100000 + Math.floor(Math.random() * 900000));
+    if (!db.users[id]) return id;
+  }
+  var seq = 100000;
+  while (db.users[String(seq)]) seq += 1;
+  return String(seq);
+}
+
+function pick(list) {
+  return list[Math.floor(Math.random() * list.length)];
 }
 
 // ── 저장소 ─────────────────────────────────────────────────────
 function emptyDb() {
-  return { version: 2, users: {}, banned: {}, quizzes: {}, notice: '' };
+  return { version: 3, users: {}, links: {}, quizzes: {} };
 }
 
 function loadDb() {
@@ -148,11 +199,10 @@ function loadDb() {
   if (!raw || typeof raw !== 'object') return emptyDb();
 
   var db = emptyDb();
-  db.version = raw.version || 2;
+  db.version = raw.version || 3;
   db.users = raw.users && typeof raw.users === 'object' ? raw.users : {};
-  db.banned = raw.banned && typeof raw.banned === 'object' ? raw.banned : {};
+  db.links = raw.links && typeof raw.links === 'object' ? raw.links : {};
   db.quizzes = raw.quizzes && typeof raw.quizzes === 'object' ? raw.quizzes : {};
-  db.notice = typeof raw.notice === 'string' ? raw.notice : '';
   return db;
 }
 
@@ -175,65 +225,15 @@ function say(msg, text) {
   }
 }
 
-function userLine(user) {
+function memberLine(user) {
   var level = levelFor(user.totalExp);
-  return user.name + ' · Lv.' + level + ' ' + tierFor(level) +
-    ' · ' + expInLevel(user.totalExp) + '/' + CONFIG.EXP_PER_LEVEL +
-    ' EXP (누적 ' + user.totalExp + ')';
+  return '✨ Lv.' + level + ' ' + tierFor(level) + ' · ' + user.totalExp + ' EXP';
 }
 
-function helpText(isAdmin) {
-  var lines = [
-    '[ 플로버 봇 명령어 ]',
-    '!가입 <닉네임> <비밀번호> — 가입',
-    '!로그인 <닉네임> <비밀번호> — 로그인',
-    '!로그아웃 — 로그아웃',
-    '!내정보 — 내 레벨·EXP',
-    '!출석 — 오늘 출석 (+' + CONFIG.ATTENDANCE_EXP + ' EXP)',
-    '!랭킹 — 누적 EXP 상위 ' + CONFIG.RANK_LIMIT + '명',
-    '!퀴즈 — 일반 퀴즈',
-    '!노래퀴즈 — 노래 맞히기',
-    '!힌트 — 진행 중인 퀴즈 힌트',
-    '!정답 <답> — 정답 제출',
-    '!멤버 — 멤버 목록',
-    '!공지 — 공지 확인',
-    '!도움말 — 이 목록'
-  ];
-
-  if (isAdmin) {
-    lines.push('');
-    lines.push('[ 관리자 ]');
-    lines.push('!관리자등록 <코드> — 관리자 권한 얻기');
-    lines.push('!회원목록 — 가입자 목록');
-    lines.push('!회원조회 <닉네임> — 한 명 자세히');
-    lines.push('!밴 <닉네임> — 이용 제한');
-    lines.push('!밴해제 <닉네임> — 제한 해제');
-    lines.push('!공지등록 <문구> — 공지 설정');
-    lines.push('!백업 — 기록 백업 파일 만들기');
-  }
-
-  return lines.join('\n');
-}
-
-// ── 사용자 상태 ────────────────────────────────────────────────
-function findUserByName(db, name) {
-  var target = String(name || '').toLowerCase();
-  for (var id in db.users) {
-    if (!db.users.hasOwnProperty(id)) continue;
-    if (String(db.users[id].name).toLowerCase() === target) return db.users[id];
-  }
-  return null;
-}
-
-function isBanned(db, msg) {
-  return Boolean(db.banned[identityOf(msg)]);
-}
-
-/** 로그인 세션은 메모리에만 둡니다(앱을 껐다 켜면 다시 로그인). */
-var sessions = {};
-
+// ── 사용자 찾기 ────────────────────────────────────────────────
+/** 지금 이 사람에게 연결된 회원. 없으면 null */
 function currentUser(db, msg) {
-  var id = sessions[identityOf(msg)];
+  var id = db.links[identityOf(msg)];
   if (!id || !db.users[id]) return null;
   return db.users[id];
 }
@@ -247,8 +247,7 @@ function addExp(user, amount) {
 
 /** 채팅만으로 레벨업하지 않도록 하루 상한과 쿨다운을 둡니다. */
 function recordActivity(db, msg) {
-  var id = identityOf(msg);
-  var user = db.users[id];
+  var user = currentUser(db, msg);
   if (!user) return;
 
   var now = nowMs();
@@ -265,6 +264,216 @@ function recordActivity(db, msg) {
   user.lastMessageAt = now;
   user.expDayAmount += CONFIG.EXP_PER_MESSAGE;
   addExp(user, CONFIG.EXP_PER_MESSAGE);
+}
+
+function needUser(db, msg) {
+  var user = currentUser(db, msg);
+  if (!user) {
+    say(msg, '아직 가입하지 않았어요. "!가입" 을 먼저 보내 주세요.');
+    return null;
+  }
+  return user;
+}
+
+// ── 사용법 ─────────────────────────────────────────────────────
+function usageText() {
+  var lines = [
+    '[ 플로버 봇 사용법 ]',
+    '👤 !정보 — 내 정보 보기',
+    '🔗 !연동 회원번호 — 회원번호로 기록 다시 연결',
+    '💖 !최애 — 내 최애 멤버',
+    '🗓️ !입덕 — 내 입덕일',
+    '🎵 !추천곡 — 오늘의 추천곡',
+    '😍 !최애등록 멤버 — 최애 멤버 등록',
+    '🗓 !입덕등록 날짜 — 입덕일 등록 (예: !입덕등록 2021-05-04)',
+    '🆔 !이름변경 이름 — 봇에서 부를 이름 변경',
+    '🎉 !가입 — 회원가입 (회원번호 발급)'
+  ];
+
+  if (EXTRA_COMMANDS.length > 0) {
+    lines.push('');
+    lines.push('[ 추가 명령어 ]');
+    lines = lines.concat(EXTRA_COMMANDS);
+  }
+
+  return lines.join('\n');
+}
+
+// ── 가입 / 연동 ────────────────────────────────────────────────
+function handleSignUp(db, msg) {
+  var identity = identityOf(msg);
+  var linked = db.links[identity];
+  if (linked && db.users[linked]) {
+    say(msg, '이미 가입한 회원이에요 🍀\n👤 이름 : ' + db.users[linked].name +
+      '\n🆔 회원번호 : ' + linked + '\n"!정보" 로 확인해 보세요.');
+    return;
+  }
+
+  var name = displayNameOf(msg);
+  if (!name || name === '알수없음') {
+    say(msg, '닉네임을 읽을 수 없어요. 프로필 이름을 확인한 뒤 다시 시도해 주세요.');
+    return;
+  }
+  if (name.length > CONFIG.NAME_MAX) name = name.slice(0, CONFIG.NAME_MAX);
+
+  var id = makeMemberId(db);
+  db.users[id] = {
+    name: name,
+    fav: '',
+    since: '',
+    totalExp: 0,
+    attendance: {},
+    createdDay: kstDay(),
+    expDay: kstDay(),
+    expDayAmount: 0,
+    lastMessageAt: 0
+  };
+  db.links[identity] = id;
+  saveDb(db);
+
+  say(msg, '🎉 회원가입 완료 🍀\n👤 이름 : ' + name + '\n🆔 회원번호 : ' + id);
+}
+
+function handleLink(db, msg, args) {
+  var code = String(args[0] || '').replace(/[^0-9]/g, '');
+  if (!code) {
+    say(msg, '사용법: !연동 회원번호 (예: !연동 760728)');
+    return;
+  }
+
+  var user = db.users[code];
+  if (!user) {
+    say(msg, '회원번호 ' + code + ' 을(를) 찾을 수 없어요. "!정보" 로 번호를 다시 확인해 주세요.');
+    return;
+  }
+
+  var identity = identityOf(msg);
+  var linked = db.links[identity];
+  if (linked && linked !== code && db.users[linked]) {
+    say(msg, '이미 회원번호 ' + linked + ' (' + db.users[linked].name +
+      ') 로 연결되어 있어요.\n다른 번호로 옮기려면 운영진에게 알려 주세요.');
+    return;
+  }
+  if (linked === code && db.users[code]) {
+    say(msg, '이미 연결되어 있어요 🍀\n👤 이름 : ' + user.name + '\n🆔 회원번호 : ' + code);
+    return;
+  }
+
+  db.links[identity] = code;
+  saveDb(db);
+  say(msg, '🔗 연동 완료 🍀\n👤 이름 : ' + user.name + '\n🆔 회원번호 : ' + code);
+}
+
+// ── 정보 / 최애 / 입덕 ─────────────────────────────────────────
+function handleInfo(db, msg) {
+  var user = needUser(db, msg);
+  if (!user) return;
+
+  var id = db.links[identityOf(msg)];
+  var lines = [
+    '👤 내 정보',
+    '👤 이름 : ' + user.name,
+    '🆔 회원번호 : ' + id,
+    '💖 최애 : ' + (user.fav || '아직 없음 (!최애등록 멤버)'),
+    '🗓️ 입덕 : ' + (user.since || '아직 없음 (!입덕등록 날짜)'),
+    memberLine(user)
+  ];
+  say(msg, lines.join('\n'));
+}
+
+function handleFav(db, msg) {
+  var user = needUser(db, msg);
+  if (!user) return;
+  say(msg, user.fav
+    ? '💖 최애 : ' + user.fav
+    : '💖 아직 최애를 등록하지 않았어요. "!최애등록 멤버" 로 등록해 주세요.\n멤버: ' + MEMBERS.join(', '));
+}
+
+function handleSetFav(db, msg, args) {
+  var user = needUser(db, msg);
+  if (!user) return;
+
+  var text = args.join(' ');
+  if (!text) {
+    say(msg, '사용법: !최애등록 멤버\n멤버: ' + MEMBERS.join(', '));
+    return;
+  }
+
+  var member = matchMember(text);
+  if (!member) {
+    say(msg, '"' + text + '" 에 해당하는 멤버를 찾지 못했어요.\n멤버: ' + MEMBERS.join(', '));
+    return;
+  }
+
+  user.fav = member;
+  saveDb(db);
+  say(msg, '😍 최애를 ' + member + ' 님으로 등록했어요!');
+}
+
+function handleSince(db, msg) {
+  var user = needUser(db, msg);
+  if (!user) return;
+  say(msg, user.since
+    ? '🗓️ 입덕일 : ' + user.since
+    : '🗓️ 아직 입덕일을 등록하지 않았어요. "!입덕등록 날짜" 로 등록해 주세요.');
+}
+
+function handleSetSince(db, msg, args) {
+  var user = needUser(db, msg);
+  if (!user) return;
+
+  var text = args.join(' ');
+  if (!text) {
+    say(msg, '사용법: !입덕등록 날짜 (예: !입덕등록 2021-05-04)');
+    return;
+  }
+
+  var day = parseDateInput(text);
+  if (!day) {
+    say(msg, '날짜를 알아보지 못했어요. 예: !입덕등록 2021-05-04');
+    return;
+  }
+  if (day > kstDay()) {
+    say(msg, '아직 오지 않은 날짜예요. 오늘(' + kstDay() + ') 이전 날짜로 적어 주세요.');
+    return;
+  }
+  if (day < CONFIG.SINCE_MIN) {
+    say(msg, '입덕일이 너무 이른 것 같아요. ' + CONFIG.SINCE_MIN + ' 이후로 적어 주세요.');
+    return;
+  }
+
+  user.since = day;
+  saveDb(db);
+  say(msg, '🗓️ 입덕일을 ' + day + ' 로 저장했어요!');
+}
+
+function handleRename(db, msg, args) {
+  var user = needUser(db, msg);
+  if (!user) return;
+
+  var name = args.join(' ').replace(/^\s+|\s+$/g, '');
+  if (!name) {
+    say(msg, '사용법: !이름변경 이름');
+    return;
+  }
+  if (name.length > CONFIG.NAME_MAX) {
+    say(msg, '이름은 ' + CONFIG.NAME_MAX + '자 이내로 정해 주세요.');
+    return;
+  }
+
+  var before = user.name;
+  user.name = name;
+  saveDb(db);
+  say(msg, '🆔 이름을 ' + before + ' → ' + name + ' 으로 바꿨어요.');
+}
+
+function handleRecommend(db, msg) {
+  if (SONGS.length === 0) {
+    say(msg, '추천곡 목록이 비어 있어요. 스크립트의 SONGS 를 채워 주세요.');
+    return;
+  }
+  var song = pick(SONGS);
+  say(msg, '🎵 오늘의 추천곡\n' + song.title + ' — fromis_9\n한 번 들어 보세요 🍀');
 }
 
 // ── 퀴즈 ───────────────────────────────────────────────────────
@@ -311,8 +520,15 @@ function startQuiz(db, msg, kind) {
   say(msg, lines.join('\n'));
 }
 
-function pick(list) {
-  return list[Math.floor(Math.random() * list.length)];
+function handleHint(db, msg) {
+  var quiz = db.quizzes[msg.room];
+  if (!quiz) {
+    say(msg, '진행 중인 퀴즈가 없어요. "!퀴즈" 또는 "!노래퀴즈" 로 시작해 주세요.');
+    return;
+  }
+
+  var left = Math.round((CONFIG.QUIZ_TTL_MS - (nowMs() - quiz.at)) / 1000);
+  say(msg, '힌트: ' + quiz.hint + (left > 0 ? '\n남은 시간 약 ' + left + '초' : ''));
 }
 
 function answeredQuiz(db, msg, text) {
@@ -341,10 +557,10 @@ function answeredQuiz(db, msg, text) {
 
   if (user) {
     var result = addExp(user, CONFIG.QUIZ_EXP);
-    message += '\n+' + CONFIG.QUIZ_EXP + ' EXP · ' + userLine(user);
-    if (result.up) message += '\n레벨 업! Lv.' + result.after;
+    message += '\n+' + CONFIG.QUIZ_EXP + ' EXP · ' + user.name + ' · ' + memberLine(user);
+    if (result.up) message += '\n레벨 업! Lv.' + result.after + ' ' + tierFor(result.after);
   } else {
-    message += '\n(로그인하면 EXP를 받을 수 있어요: !로그인 <닉네임> <비밀번호>)';
+    message += '\n(가입하면 EXP를 받을 수 있어요: !가입)';
   }
 
   delete db.quizzes[room];
@@ -352,199 +568,19 @@ function answeredQuiz(db, msg, text) {
   say(msg, message);
 }
 
-// ── 관리자 ─────────────────────────────────────────────────────
-function isAdmin(user) {
-  return Boolean(user && user.admin);
-}
-
-function adminCommand(db, msg, command, args) {
-  var user = currentUser(db, msg);
-
-  if (!isAdmin(user)) {
-    say(msg, '관리자만 사용할 수 있는 명령어예요.');
-    return;
+// ── 출석 / 랭킹 ────────────────────────────────────────────────
+function countThisMonth(attendance, day) {
+  var month = day.slice(0, 7);
+  var count = 0;
+  for (var key in attendance) {
+    if (attendance.hasOwnProperty(key) && key.indexOf(month) === 0) count += 1;
   }
-
-  switch (command) {
-    case '회원목록':
-      return listUsers(db, msg);
-    case '회원조회':
-      return showUser(db, msg, args[0]);
-    case '밴':
-      return banUser(db, msg, args[0]);
-    case '밴해제':
-      return unbanUser(db, msg, args[0]);
-    case '공지등록':
-      return setNotice(db, msg, args.join(' '));
-    case '백업':
-      return backup(db, msg);
-    default:
-      say(msg, '알 수 없는 관리자 명령어예요. "!도움말" 을 확인해 주세요.');
-  }
-}
-
-function listUsers(db, msg) {
-  var ids = Object.keys(db.users);
-  if (ids.length === 0) {
-    say(msg, '아직 가입자가 없어요.');
-    return;
-  }
-
-  var lines = ['[ 가입자 ' + ids.length + '명 ]'];
-  ids.sort(function (a, b) {
-    return db.users[b].totalExp - db.users[a].totalExp;
-  });
-  for (var i = 0; i < ids.length; i += 1) {
-    var user = db.users[ids[i]];
-    var level = levelFor(user.totalExp);
-    lines.push((i + 1) + '. ' + user.name + ' · Lv.' + level + ' · ' + user.totalExp + ' EXP' +
-      (db.banned[ids[i]] ? ' · 제한됨' : ''));
-  }
-  say(msg, lines.join('\n'));
-}
-
-function showUser(db, msg, name) {
-  if (!name) {
-    say(msg, '사용법: !회원조회 <닉네임>');
-    return;
-  }
-
-  var user = findUserByName(db, name);
-  if (!user) {
-    say(msg, '"' + name + '" 닉네임의 가입자를 찾을 수 없어요.');
-    return;
-  }
-
-  var lines = [
-    userLine(user),
-    '가입일: ' + (user.createdDay || '-'),
-    '출석: ' + Object.keys(user.attendance || {}).length + '회',
-    '관리자: ' + (user.admin ? '예' : '아니오'),
-    '제한: ' + (db.banned[user.id] ? '예' : '아니오')
-  ];
-  say(msg, lines.join('\n'));
-}
-
-function banUser(db, msg, name) {
-  var user = name ? findUserByName(db, name) : null;
-  if (!user) {
-    say(msg, '사용법: !밴 <닉네임> (가입한 닉네임과 같아야 해요)');
-    return;
-  }
-  if (user.admin) {
-    say(msg, '관리자는 제한할 수 없어요.');
-    return;
-  }
-
-  db.banned[user.id] = { name: user.name, at: nowMs(), by: displayNameOf(msg) };
-  saveDb(db);
-  say(msg, user.name + ' 님의 이용을 제한했어요.');
-}
-
-function unbanUser(db, msg, name) {
-  var user = name ? findUserByName(db, name) : null;
-  if (!user) {
-    say(msg, '사용법: !밴해제 <닉네임>');
-    return;
-  }
-
-  delete db.banned[user.id];
-  saveDb(db);
-  say(msg, user.name + ' 님의 제한을 풀었어요.');
-}
-
-function setNotice(db, msg, text) {
-  if (!text) {
-    say(msg, '사용법: !공지등록 <문구>');
-    return;
-  }
-  db.notice = text;
-  saveDb(db);
-  say(msg, '공지를 설정했어요.');
-}
-
-function backup(db, msg) {
-  var name = CONFIG.BACKUP_PREFIX + kstDay() + '.json';
-  try {
-    Database.writeObject(name, db);
-  } catch (e) {
-    Log.e('백업 실패: ' + e, false);
-    say(msg, '백업에 실패했어요.');
-    return;
-  }
-  say(msg, '백업 파일을 만들었어요: ' + name +
-    '\n가입자 ' + Object.keys(db.users).length + '명 · 같은 폰 안에 저장됩니다.');
-}
-
-// ── 명령 처리 ──────────────────────────────────────────────────
-function handleSignUp(db, msg, args) {
-  if (args.length < 2) {
-    say(msg, '사용법: !가입 <닉네임> <비밀번호>');
-    return;
-  }
-
-  var name = args[0];
-  var password = args[1];
-  var id = identityOf(msg);
-
-  if (name.length > 12) {
-    say(msg, '닉네임은 12자 이내로 정해 주세요.');
-    return;
-  }
-  if (password.length < 4) {
-    say(msg, '비밀번호는 4자 이상으로 정해 주세요.');
-    return;
-  }
-  if (db.users[id]) {
-    say(msg, '이미 가입되어 있어요. "!내정보" 로 확인하거나 "!로그인" 을 해 주세요.');
-    return;
-  }
-  if (findUserByName(db, name)) {
-    say(msg, '이미 사용 중인 닉네임이에요. 다른 닉네임을 써 주세요.');
-    return;
-  }
-
-  db.users[id] = {
-    id: id,
-    name: name,
-    pw: hashPassword(password),
-    createdDay: kstDay(),
-    totalExp: 0,
-    attendance: {},
-    expDay: kstDay(),
-    expDayAmount: 0,
-    lastMessageAt: 0,
-    admin: false
-  };
-
-  sessions[id] = id;
-  saveDb(db);
-  say(msg, '가입 완료! 환영해요, ' + name + ' 님.\n' + userLine(db.users[id]) +
-    '\n"!출석" 으로 매일 ' + CONFIG.ATTENDANCE_EXP + ' EXP를 받을 수 있어요.');
-}
-
-function handleLogin(db, msg, args) {
-  if (args.length < 2) {
-    say(msg, '사용법: !로그인 <닉네임> <비밀번호>');
-    return;
-  }
-
-  var user = findUserByName(db, args[0]);
-  if (!user || user.pw !== hashPassword(args[1])) {
-    say(msg, '닉네임 또는 비밀번호가 맞지 않아요.');
-    return;
-  }
-
-  sessions[identityOf(msg)] = user.id;
-  say(msg, '로그인했어요.\n' + userLine(user));
+  return count;
 }
 
 function handleAttendance(db, msg) {
-  var user = currentUser(db, msg);
-  if (!user) {
-    say(msg, '로그인이 필요해요. "!로그인 <닉네임> <비밀번호>" 를 보내 주세요.');
-    return;
-  }
+  var user = needUser(db, msg);
+  if (!user) return;
 
   var day = kstDay();
   if (!user.attendance) user.attendance = {};
@@ -559,26 +595,17 @@ function handleAttendance(db, msg) {
 
   var lines = [
     '출석 완료! +' + CONFIG.ATTENDANCE_EXP + ' EXP (' + day + ')',
-    userLine(user)
+    user.name + ' · ' + memberLine(user)
   ];
   if (result.up) lines.push('레벨 업! Lv.' + result.after + ' ' + tierFor(result.after));
   lines.push('이번 달 출석 ' + countThisMonth(user.attendance, day) + '회');
   say(msg, lines.join('\n'));
 }
 
-function countThisMonth(attendance, day) {
-  var month = day.slice(0, 7);
-  var count = 0;
-  for (var key in attendance) {
-    if (attendance.hasOwnProperty(key) && key.indexOf(month) === 0) count += 1;
-  }
-  return count;
-}
-
 function handleRanking(db, msg) {
   var ids = Object.keys(db.users);
   if (ids.length === 0) {
-    say(msg, '아직 가입자가 없어요. "!가입 <닉네임> <비밀번호>" 로 시작해 보세요.');
+    say(msg, '아직 가입자가 없어요. "!가입" 으로 시작해 보세요.');
     return;
   }
 
@@ -590,45 +617,16 @@ function handleRanking(db, msg) {
   var limit = Math.min(CONFIG.RANK_LIMIT, ids.length);
   for (var i = 0; i < limit; i += 1) {
     var user = db.users[ids[i]];
-    lines.push((i + 1) + '. ' + user.name + ' · Lv.' + levelFor(user.totalExp) +
-      ' · ' + user.totalExp + ' EXP');
+    lines.push((i + 1) + '. ' + user.name + ' · Lv.' + levelFor(user.totalExp) + ' · ' + user.totalExp + ' EXP');
   }
   say(msg, lines.join('\n'));
 }
 
-function handleAdminSetup(db, msg, args) {
-  var code = args[0];
-  if (!code) {
-    say(msg, '사용법: !관리자등록 <코드>');
-    return;
-  }
-
-  // 설정 파일에서 코드를 바꾸지 않았으면 아무도 관리자가 될 수 없습니다.
-  if (CONFIG.ADMIN_SETUP_CODE === 'CHANGE_THIS_TO_YOUR_OWN_SECRET') {
-    say(msg, '관리자 등록이 잠겨 있어요. 스크립트의 ADMIN_SETUP_CODE 를 본인만 아는 값으로 바꾼 뒤 다시 시도해 주세요.');
-    return;
-  }
-
-  if (code !== CONFIG.ADMIN_SETUP_CODE) {
-    say(msg, '코드가 맞지 않아요.');
-    return;
-  }
-
-  var user = currentUser(db, msg);
-  if (!user) {
-    say(msg, '먼저 "!가입 <닉네임> <비밀번호>" 로 가입해 주세요.');
-    return;
-  }
-
-  user.admin = true;
-  saveDb(db);
-  say(msg, user.name + ' 님이 관리자가 되었어요. "!도움말" 로 관리자 명령을 확인하세요.');
-}
-
+// ── 명령 처리 ──────────────────────────────────────────────────
 function handleMessage(msg) {
   if (!msg || typeof msg.content !== 'string') return;
 
-  var text = msg.content.trim();
+  var text = msg.content.replace(/^\s+|\s+$/g, '');
   if (text.indexOf('!') !== 0 && text.indexOf('！') !== 0) return;
 
   var body = text.replace(/^[!！]\s*/, '');
@@ -641,40 +639,53 @@ function handleMessage(msg) {
   var db = loadDb();
 
   try {
-    if (isBanned(db, msg)) {
-      say(msg, '이용이 제한된 사용자예요. 운영진에게 문의해 주세요.');
-      return;
-    }
-
-    var user = currentUser(db, msg);
+    currentUser(db, msg);
     recordActivity(db, msg);
 
     switch (command) {
+      case '가입':
+      case '회원가입':
+        handleSignUp(db, msg);
+        return;
+
+      case '연동':
+        handleLink(db, msg, args);
+        return;
+
+      case '정보':
+      case '내정보':
+        handleInfo(db, msg);
+        return;
+
+      case '최애':
+        handleFav(db, msg);
+        return;
+
+      case '최애등록':
+        handleSetFav(db, msg, args);
+        return;
+
+      case '입덕':
+        handleSince(db, msg);
+        return;
+
+      case '입덕등록':
+        handleSetSince(db, msg, args);
+        return;
+
+      case '이름변경':
+        handleRename(db, msg, args);
+        return;
+
+      case '추천곡':
+        handleRecommend(db, msg);
+        return;
+
+      case '사용법':
       case '도움말':
       case '명령어':
       case 'help':
-        say(msg, helpText(isAdmin(user)));
-        return;
-
-      case '가입':
-        handleSignUp(db, msg, args);
-        return;
-
-      case '로그인':
-        handleLogin(db, msg, args);
-        return;
-
-      case '로그아웃':
-        delete sessions[identityOf(msg)];
-        say(msg, '로그아웃했어요.');
-        return;
-
-      case '내정보':
-        if (!user) {
-          say(msg, '로그인이 필요해요. "!로그인 <닉네임> <비밀번호>"');
-          return;
-        }
-        say(msg, userLine(user) + '\n출석 ' + Object.keys(user.attendance || {}).length + '회');
+        say(msg, usageText());
         return;
 
       case '출석':
@@ -683,14 +694,6 @@ function handleMessage(msg) {
 
       case '랭킹':
         handleRanking(db, msg);
-        return;
-
-      case '멤버':
-        say(msg, '[ 멤버 ' + MEMBERS.length + '명 ]\n' + MEMBERS.join(', '));
-        return;
-
-      case '공지':
-        say(msg, db.notice ? '[ 공지 ]\n' + db.notice : '등록된 공지가 없어요.');
         return;
 
       case '퀴즈':
@@ -709,22 +712,8 @@ function handleMessage(msg) {
         answeredQuiz(db, msg, args.join(' '));
         return;
 
-      case '관리자등록':
-        handleAdminSetup(db, msg, args);
-        return;
-
-      case '회원목록':
-      case '회원조회':
-      case '밴':
-      case '밴해제':
-      case '공지등록':
-      case '백업':
-        adminCommand(db, msg, command, args);
-        return;
-
       default:
-        // 예전에는 여기서 "관리자만 사용할 수 있는" 이 나와서 오타가 오해를 샀습니다.
-        say(msg, '알 수 없는 명령어예요: ' + command + '\n"!도움말" 을 확인해 주세요.');
+        say(msg, '알 수 없는 명령어예요: ' + command + '\n"!사용법" 을 확인해 주세요.');
         return;
     }
   } catch (e) {
@@ -733,18 +722,6 @@ function handleMessage(msg) {
   } finally {
     saveDb(db);
   }
-}
-
-function handleHint(db, msg) {
-  var quiz = db.quizzes[msg.room];
-  if (!quiz) {
-    say(msg, '진행 중인 퀴즈가 없어요. "!퀴즈" 또는 "!노래퀴즈" 로 시작해 주세요.');
-    return;
-  }
-
-  var left = Math.round((CONFIG.QUIZ_TTL_MS - (nowMs() - quiz.at)) / 1000);
-  say(msg, '힌트: ' + quiz.hint +
-    (left > 0 ? '\n남은 시간 약 ' + left + '초' : ''));
 }
 
 // ── 등록 ───────────────────────────────────────────────────────
