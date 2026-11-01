@@ -45,7 +45,9 @@ var SONGS = [
  * 사용법의 "추가 명령어" 칸에 그대로 나옵니다. 원하는 만큼 직접 적으면 됩니다.
  * 형식: '· !명령 — 설명'
  */
-var EXTRA_COMMANDS = [];
+var EXTRA_COMMANDS = [
+  '· !레벨 회원번호 — 그 회원번호의 레벨 보기'
+];
 
 // ── 공통 유틸 ──────────────────────────────────────────────────
 function nowMs() {
@@ -60,6 +62,35 @@ function pad2(n) {
 function kstDay(ms) {
   var d = new Date((ms || nowMs()) + 9 * 3600 * 1000);
   return d.getUTCFullYear() + '-' + pad2(d.getUTCMonth() + 1) + '-' + pad2(d.getUTCDate());
+}
+
+/** 'YYYY-MM-DD' → UTC 밀리초 (형식이 틀리면 null) */
+function parseDay(day) {
+  var m = String(day || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return null;
+  return Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+}
+
+function daysBetween(from, to) {
+  var a = parseDay(from);
+  var b = parseDay(to);
+  if (a === null || b === null) return 0;
+  return Math.max(0, Math.round((b - a) / 86400000));
+}
+
+/** 레벨은 입덕일로만 매깁니다: 입덕 30일마다 1레벨. 입덕일이 없으면 0 */
+function fanLevel(since) {
+  if (!since) return 0;
+  return Math.floor(daysBetween(since, kstDay()) / 30) + 1;
+}
+
+function tierFor(level) {
+  if (level >= 60) return 'Moon';
+  if (level >= 48) return 'Star';
+  if (level >= 36) return 'Flover';
+  if (level >= 24) return 'Blossom';
+  if (level >= 12) return 'Bloom';
+  return 'Sprout';
 }
 
 /**
@@ -384,6 +415,48 @@ function handleRecommend(db, msg) {
   say(msg, '🎵 오늘의 추천곡\n' + pick(SONGS) + ' — fromis_9\n한 번 들어 보세요 🍀');
 }
 
+// ── 레벨 ───────────────────────────────────────────────────────
+function levelLines(id, user) {
+  var lines = ['🎚️ 레벨 조회 · ' + id, '👤 이름 : ' + user.name];
+  if (!user.since) {
+    lines.push('📈 아직 입덕일이 없어서 레벨이 없어요. "!입덕등록 날짜" 로 등록해 주세요.');
+    return lines;
+  }
+
+  var level = fanLevel(user.since);
+  lines.push('📈 Lv.' + level + ' ' + tierFor(level) +
+    ' · 입덕 ' + daysBetween(user.since, kstDay()) + '일째');
+  return lines;
+}
+
+function handleLevel(db, msg, args) {
+  var given = String(args[0] || '');
+  var code = given.replace(/[^0-9]/g, '');
+
+  if (given && !code) {
+    say(msg, '회원번호는 숫자 6자리예요. (예: !레벨 792642)');
+    return;
+  }
+
+  if (!code) {
+    var mine = currentUser(db, msg);
+    if (!mine) {
+      say(msg, '사용법: !레벨 회원번호 (예: !레벨 792642)');
+      return;
+    }
+    say(msg, levelLines(db.links[identityOf(msg)], mine).join('\n'));
+    return;
+  }
+
+  var user = db.users[code];
+  if (!user) {
+    say(msg, '회원번호 ' + code + ' 을(를) 찾을 수 없어요. "!정보" 로 번호를 다시 확인해 주세요.');
+    return;
+  }
+
+  say(msg, levelLines(code, user).join('\n'));
+}
+
 // ── 명령 처리 ──────────────────────────────────────────────────
 function handleMessage(msg) {
   if (!msg || typeof msg.content !== 'string') return;
@@ -438,6 +511,10 @@ function handleMessage(msg) {
 
       case '추천곡':
         handleRecommend(db, msg);
+        return;
+
+      case '레벨':
+        handleLevel(db, msg, args);
         return;
 
       case '사용법':
