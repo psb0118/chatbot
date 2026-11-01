@@ -22,7 +22,12 @@
 var CONFIG = {
   DB_NAME: 'flover_data.json',
   NAME_MAX: 20,
-  SINCE_MIN: '2017-01-01'
+  SINCE_MIN: '2017-01-01',
+
+  // 레벨 = [√(EXP / 100)] + 1
+  EXP_PER_MESSAGE: 2,
+  MESSAGE_COOLDOWN_MS: 5000,
+  MESSAGE_EXP_DAILY_CAP: 200
 };
 
 // ── 데이터 (여기만 고치면 됩니다) ──────────────────────────────
@@ -31,14 +36,127 @@ var MEMBERS = [
   '이서연', '이채영', '이나경', '백지헌'
 ];
 
-// !추천곡 이 여기서 한 곡씩 골라 줍니다.
+/**
+ * !추천곡 은 여기서 한 곡을 뽑습니다.
+ * 2017 프리데뷔 〈유리구두〉 ~ 2026 정규 2집 《Glow ME》까지 수록곡·일본 데뷔·OST 전부.
+ * 반주(instrumental) 트랙과, 발표 예정이었다 취소된 2020 일본 프리데뷔 싱글은 뺐습니다.
+ */
 var SONGS = [
-  'Glass Shoes',
-  'To Heart',
-  'LOVE BOMB',
-  'FUN!',
-  'Feel Good (SECRET CODE)',
-  'WE GO'
+  // 프리데뷔 (2017)
+  { title: '유리구두 (Glass Shoes)', album: '유리구두 · 2017' },
+
+  // 1st Mini 《To. Heart》 (2018-01-24)
+  { title: '나에게로 오는 길 (Intro.)', album: 'To. Heart · 2018' },
+  { title: 'To Heart', album: 'To. Heart · 2018' },
+  { title: '환상속의 그대 (Miracle)', album: 'To. Heart · 2018' },
+  { title: '피노키오 (Pinocchio)', album: 'To. Heart · 2018' },
+  { title: 'Be With You', album: 'To. Heart · 2018' },
+  { title: '유리구두 (MAMA Ver.)', album: 'To. Heart · 2018' },
+
+  // 2nd Mini 《To. Day》 (2018-06-05)
+  { title: '다가가고 싶어 (Close To You)', album: 'To. Day · 2018' },
+  { title: '너를 따라, 너에게 (Think of You)', album: 'To. Day · 2018' },
+  { title: '두근두근 (DKDK)', album: 'To. Day · 2018' },
+  { title: '22세기 소녀 (22Century Girl)', album: 'To. Day · 2018' },
+  { title: 'CLOVER', album: 'To. Day · 2018' },
+  { title: 'FIRST LOVE', album: 'To. Day · 2018' },
+
+  // Special Single 《From.9》 (2018-10-10)
+  { title: 'LOVE BOMB', album: 'From.9 · 2018' },
+  { title: 'DANCING QUEEN', album: 'From.9 · 2018' },
+  { title: '물들어 (Coloring)', album: 'From.9 · 2018' },
+  { title: '두근두근 (From.9 Ver.)', album: 'From.9 · 2018' },
+  { title: '22세기 소녀 (From.9 Ver.)', album: 'From.9 · 2018' },
+
+  // Single 《FUN FACTORY》 (2019-06-04)
+  { title: 'FUN!', album: 'FUN FACTORY · 2019' },
+  { title: 'LOVE RUMPUMPUM', album: 'FUN FACTORY · 2019' },
+  { title: 'FLY HIGH', album: 'FUN FACTORY · 2019' },
+
+  // 3rd Mini 《My Little Society》 (2020-09-16)
+  { title: 'Feel Good (SECRET CODE)', album: 'My Little Society · 2020' },
+  { title: 'Weather', album: 'My Little Society · 2020' },
+  { title: '별의 밤 (Starry Night)', album: 'My Little Society · 2020' },
+  { title: 'Somebody to love', album: 'My Little Society · 2020' },
+  { title: '물고기 (Mulgogi)', album: 'My Little Society · 2020' },
+
+  // Single 《9 WAY TICKET》 (2021-05-17)
+  { title: 'Airplane Mode', album: '9 WAY TICKET · 2021' },
+  { title: 'WE GO', album: '9 WAY TICKET · 2021' },
+  { title: 'Promise', album: '9 WAY TICKET · 2021' },
+
+  // Special Single 《Talk & Talk》 (2021-09-01)
+  { title: 'Talk & Talk', album: 'Talk & Talk · 2021' },
+
+  // 4th Mini 《Midnight Guest》 (2022-01-17)
+  { title: 'Escape Room', album: 'Midnight Guest · 2022' },
+  { title: 'DM', album: 'Midnight Guest · 2022' },
+  { title: 'Love is Around', album: 'Midnight Guest · 2022' },
+  { title: 'Hush Hush', album: 'Midnight Guest · 2022' },
+  { title: '0g', album: 'Midnight Guest · 2022' },
+
+  // 5th Mini 《from our Memento Box》 (2022-06-27)
+  { title: 'Up And', album: 'from our Memento Box · 2022' },
+  { title: 'Stay This Way', album: 'from our Memento Box · 2022' },
+  { title: 'Blind Letter', album: 'from our Memento Box · 2022' },
+  { title: 'Cheese', album: 'from our Memento Box · 2022' },
+  { title: 'Rewind', album: 'from our Memento Box · 2022' },
+
+  // 1st Album 《Unlock My World》 (2023-06-05)
+  { title: 'Attitude', album: 'Unlock My World · 2023' },
+  { title: '#menow', album: 'Unlock My World · 2023' },
+  { title: 'Wishlist', album: 'Unlock My World · 2023' },
+  { title: 'In the Mirror', album: 'Unlock My World · 2023' },
+  { title: "Don't Care", album: 'Unlock My World · 2023' },
+  { title: 'Prom Night', album: 'Unlock My World · 2023' },
+  { title: 'Bring It On', album: 'Unlock My World · 2023' },
+  { title: 'What I Want', album: 'Unlock My World · 2023' },
+  { title: 'My Night Routine', album: 'Unlock My World · 2023' },
+  { title: '눈맞춤 (Eye Contact)', album: 'Unlock My World · 2023' },
+
+  // Single 《Supersonic》 (2024-08-12)
+  { title: 'Supersonic', album: 'Supersonic · 2024' },
+  { title: 'Beat the Heat', album: 'Supersonic · 2024' },
+  { title: 'Take A Chance', album: 'Supersonic · 2024' },
+
+  // Special Single 《from》 (2024-12-23)
+  { title: 'from', album: 'from · 2024' },
+
+  // 6th Mini 《From Our 20's》 (2025-06-25)
+  { title: 'LIKE YOU BETTER', album: "From Our 20's · 2025" },
+  { title: 'REBELUTIONAL', album: "From Our 20's · 2025" },
+  { title: 'Love=Disaster', album: "From Our 20's · 2025" },
+  { title: 'Strawberry Mimosa', album: "From Our 20's · 2025" },
+  { title: 'Twisted Love', album: "From Our 20's · 2025" },
+  { title: 'Merry Go Round', album: "From Our 20's · 2025" },
+
+  // Special Digital Single (2025-12-02)
+  { title: '하얀 그리움 (White Memories)', album: '하얀 그리움 · 2025' },
+
+  // Japan 1st EP 《LIKE YOU BETTER (Japanese ver.)》 (2026-04-01)
+  { title: 'LIKE YOU BETTER (Japanese ver.)', album: 'Japan 1st EP · 2026' },
+  { title: 'Love=Disaster (Japanese ver.)', album: 'Japan 1st EP · 2026' },
+  { title: 'Sky Runner', album: 'Japan 1st EP · 2026' },
+
+  // 2nd Album 《Glow ME》 (2026-07-21)
+  { title: 'ETERNAL', album: 'Glow ME · 2026' },
+  { title: 'Vitamin ME', album: 'Glow ME · 2026' },
+  { title: 'Pocket Treat', album: 'Glow ME · 2026' },
+  { title: 'Blue Heart', album: 'Glow ME · 2026' },
+  { title: 'Screen Time', album: 'Glow ME · 2026' },
+  { title: 'Teacher', album: 'Glow ME · 2026' },
+  { title: 'Cold Blood', album: 'Glow ME · 2026' },
+  { title: 'Why do I cry?', album: 'Glow ME · 2026' },
+  { title: 'DAY1', album: 'Glow ME · 2026' },
+  { title: 'Wonderland', album: 'Glow ME · 2026' },
+
+  // 앨범 밖 싱글·리메이크·OST
+  { title: '별 (Star)', album: 'Cyworld BGM 2021 · 2021' },
+  { title: 'Stay Alive', album: '크레이지 러브 OST · 2022' },
+  { title: '달빛바다 (Sea of Moonlight)', album: '여름방학 프로젝트 · 2022' },
+  { title: 'Love Me Back', album: 'Operation: True Love OST · 2023' },
+  { title: 'Touchdown', album: 'The Winning Try OST · 2025' },
+  { title: 'Swipe It Out', album: '월간남친 OST · 2026' }
 ];
 
 /**
@@ -64,33 +182,15 @@ function kstDay(ms) {
   return d.getUTCFullYear() + '-' + pad2(d.getUTCMonth() + 1) + '-' + pad2(d.getUTCDate());
 }
 
-/** 'YYYY-MM-DD' → UTC 밀리초 (형식이 틀리면 null) */
-function parseDay(day) {
-  var m = String(day || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (!m) return null;
-  return Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+/** 레벨 = [√(EXP / 100)] + 1 */
+function levelForExp(exp) {
+  return Math.floor(Math.sqrt(Math.max(0, exp) / 100)) + 1;
 }
 
-function daysBetween(from, to) {
-  var a = parseDay(from);
-  var b = parseDay(to);
-  if (a === null || b === null) return 0;
-  return Math.max(0, Math.round((b - a) / 86400000));
-}
-
-/** 레벨은 입덕일로만 매깁니다: 입덕 30일마다 1레벨. 입덕일이 없으면 0 */
-function fanLevel(since) {
-  if (!since) return 0;
-  return Math.floor(daysBetween(since, kstDay()) / 30) + 1;
-}
-
-function tierFor(level) {
-  if (level >= 60) return 'Moon';
-  if (level >= 48) return 'Star';
-  if (level >= 36) return 'Flover';
-  if (level >= 24) return 'Blossom';
-  if (level >= 12) return 'Bloom';
-  return 'Sprout';
+/** 그 레벨에 처음 도달하는 최소 EXP */
+function expForLevel(level) {
+  var step = Math.max(1, level) - 1;
+  return 100 * step * step;
 }
 
 /**
@@ -225,6 +325,30 @@ function needUser(db, msg) {
   return user;
 }
 
+function addExp(user, amount) {
+  user.totalExp = Math.max(0, (user.totalExp || 0) + amount);
+}
+
+/** 채팅으로 EXP를 줍니다. 도배를 막으려고 쿨다운과 하루 상한을 둡니다. */
+function recordActivity(db, msg) {
+  var user = currentUser(db, msg);
+  if (!user) return;
+
+  var now = nowMs();
+  var day = kstDay(now);
+
+  if (user.expDay !== day) {
+    user.expDay = day;
+    user.expDayAmount = 0;
+  }
+  if (now - (user.lastMessageAt || 0) < CONFIG.MESSAGE_COOLDOWN_MS) return;
+  if ((user.expDayAmount || 0) >= CONFIG.MESSAGE_EXP_DAILY_CAP) return;
+
+  user.lastMessageAt = now;
+  user.expDayAmount = (user.expDayAmount || 0) + CONFIG.EXP_PER_MESSAGE;
+  addExp(user, CONFIG.EXP_PER_MESSAGE);
+}
+
 // ── 사용법 ─────────────────────────────────────────────────────
 function usageText() {
   var lines = [
@@ -233,7 +357,7 @@ function usageText() {
     '🔗 !연동 회원번호 — 회원번호로 기록 다시 연결',
     '💖 !최애 — 내 최애 멤버',
     '🗓️ !입덕 — 내 입덕일',
-    '🎵 !추천곡 — 오늘의 추천곡',
+    '🎵 !추천곡 — 오늘의 추천곡 (전곡 ' + SONGS.length + '곡 중 랜덤)',
     '😍 !최애등록 멤버 — 최애 멤버 등록',
     '🗓 !입덕등록 날짜 — 입덕일 등록 (예: !입덕등록 2021-05-04)',
     '🆔 !이름변경 이름 — 봇에서 부를 이름 변경',
@@ -269,7 +393,15 @@ function handleSignUp(db, msg) {
   if (name.length > CONFIG.NAME_MAX) name = name.slice(0, CONFIG.NAME_MAX);
 
   var id = makeMemberId(db);
-  db.users[id] = { name: name, fav: '', since: '' };
+  db.users[id] = {
+    name: name,
+    fav: '',
+    since: '',
+    totalExp: 0,
+    expDay: kstDay(),
+    expDayAmount: 0,
+    lastMessageAt: 0
+  };
   db.links[identity] = id;
   saveDb(db);
 
@@ -316,7 +448,8 @@ function handleInfo(db, msg) {
     '👤 이름 : ' + user.name,
     '🆔 회원번호 : ' + db.links[identityOf(msg)],
     '💖 최애 : ' + (user.fav || '아직 없음 (!최애등록 멤버)'),
-    '🗓️ 입덕 : ' + (user.since || '아직 없음 (!입덕등록 날짜)')
+    '🗓️ 입덕 : ' + (user.since || '아직 없음 (!입덕등록 날짜)'),
+    '📈 레벨 : Lv.' + levelForExp(user.totalExp) + ' · ' + Math.max(0, user.totalExp || 0) + ' EXP'
   ];
   say(msg, lines.join('\n'));
 }
@@ -412,21 +545,22 @@ function handleRecommend(db, msg) {
     say(msg, '추천곡 목록이 비어 있어요. 스크립트의 SONGS 를 채워 주세요.');
     return;
   }
-  say(msg, '🎵 오늘의 추천곡\n' + pick(SONGS) + ' — fromis_9\n한 번 들어 보세요 🍀');
+  var song = pick(SONGS);
+  say(msg, '🎵 오늘의 추천곡\n' + song.title + ' — fromis_9\n💿 ' + song.album + '\n한 번 들어 보세요 🍀');
 }
 
 // ── 레벨 ───────────────────────────────────────────────────────
 function levelLines(id, user) {
-  var lines = ['🎚️ 레벨 조회 · ' + id, '👤 이름 : ' + user.name];
-  if (!user.since) {
-    lines.push('📈 아직 입덕일이 없어서 레벨이 없어요. "!입덕등록 날짜" 로 등록해 주세요.');
-    return lines;
-  }
+  var exp = Math.max(0, user.totalExp || 0);
+  var level = levelForExp(exp);
+  var next = expForLevel(level + 1);
 
-  var level = fanLevel(user.since);
-  lines.push('📈 Lv.' + level + ' ' + tierFor(level) +
-    ' · 입덕 ' + daysBetween(user.since, kstDay()) + '일째');
-  return lines;
+  return [
+    '🎚️ 레벨 조회 · ' + id,
+    '👤 이름 : ' + user.name,
+    '📈 Lv.' + level + ' · ' + exp + ' EXP',
+    '⬆️ 다음 레벨까지 ' + Math.max(0, next - exp) + ' EXP'
+  ];
 }
 
 function handleLevel(db, msg, args) {
@@ -474,6 +608,8 @@ function handleMessage(msg) {
   var db = loadDb();
 
   try {
+    recordActivity(db, msg);
+
     switch (command) {
       case '가입':
       case '회원가입':
