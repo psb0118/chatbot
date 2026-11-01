@@ -5,7 +5,8 @@ import { handleBotMessage } from './handler';
 
 const MAX_ROOM_LENGTH = 80;
 const MAX_SENDER_LENGTH = 40;
-const MAX_TEXT_LENGTH = 200;
+// Long enough for "!이벤트참여 1 <참여 문구>" without cutting the phrase.
+const MAX_TEXT_LENGTH = 500;
 
 const requireField = (
   value: unknown,

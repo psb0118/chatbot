@@ -69,7 +69,7 @@ const rankingReply = (appUrl: string | undefined): BotReply => ({
 });
 
 const registerReply = (appUrl: string | undefined): BotReply => ({
-  text: '웹에서 로그인한 뒤 표시 이름과 오픈채팅 닉네임을 등록해 주세요. 관리자가 닉네임을 확인하면 연동이 완료됩니다.',
+  text: '카톡에서는 "!가입"을 입력하면 바로 가입되고 연동 코드가 발급돼요. 웹에서 기록까지 보려면 웹에서 로그인한 뒤 표시 이름과 오픈채팅 닉네임을 등록해 주세요.',
   quickReplies: compact([
     webLink('멤버 등록', appUrl, '/register'),
     messageQuickReply('도움말', '도움말'),

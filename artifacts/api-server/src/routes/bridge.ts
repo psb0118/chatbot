@@ -29,7 +29,12 @@ const bridgeHandler: RequestHandler = async (request, response) => {
     typeof request.query.secret === 'string' ? request.query.secret : '';
   const headerSecret = request.header('x-bridge-secret') ?? '';
 
-  if (!secretMatches(querySecret || headerSecret, config.deviceBridgeSecret)) {
+  // Accept either credential: a stale `?secret=` must not shadow a valid header.
+  const authorized =
+    secretMatches(querySecret, config.deviceBridgeSecret) ||
+    secretMatches(headerSecret, config.deviceBridgeSecret);
+
+  if (!authorized) {
     response.status(401).json({ error: 'Invalid bridge secret' });
     return;
   }

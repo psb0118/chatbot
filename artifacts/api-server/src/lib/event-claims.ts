@@ -2,6 +2,7 @@ import {
   eq,
   eventClaimsTable,
   eventsTable,
+  membersTable,
   type AppDatabase,
 } from '@workspace/db';
 
@@ -27,6 +28,21 @@ export const submitEventClaim = async (
   phrase: string,
   now: Date = new Date(),
 ): Promise<ClaimOutcome> => {
+  const [member] = await database
+    .select({ status: membersTable.status })
+    .from(membersTable)
+    .where(eq(membersTable.id, memberId))
+    .limit(1);
+
+  if (!member) {
+    throw new HttpError(404, '멤버를 찾을 수 없습니다.');
+  }
+
+  // Same rule as attendance and sign-up: an inactive member cannot claim.
+  if (member.status !== 'active') {
+    throw new HttpError(403, '비활성 상태의 멤버입니다.');
+  }
+
   const [event] = await database
     .select()
     .from(eventsTable)

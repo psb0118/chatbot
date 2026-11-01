@@ -12,6 +12,8 @@ import { submitEventClaim } from '../lib/event-claims';
 import { HttpError } from '../lib/errors';
 import {
   findMemberByKakaoUserKey,
+  isValidLinkCode,
+  normalizeLinkCode,
   redeemLinkCode,
   registerKakaoMember,
   unlinkKakaoAccount,
@@ -217,9 +219,11 @@ export const handleBotMessage = async (
 
   const linkMatch = LINK_COMMAND.exec(utterance);
   if (linkMatch) {
-    const code = linkMatch[1].trim();
+    const code = normalizeLinkCode(linkMatch[1]);
 
-    if (!code) {
+    // "연동 어떻게 해요" is a question, not a code. Answering "코드를 찾을 수
+    // 없습니다" would be confusing, so show the guide instead.
+    if (!code || !isValidLinkCode(code)) {
       return linkGuide(appUrl);
     }
 

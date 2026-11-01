@@ -1,3 +1,5 @@
+import type { IncomingMessage } from 'node:http';
+
 import { clerkMiddleware } from '@clerk/express';
 import { closePool, isDatabaseConfigured } from '@workspace/db';
 import cookieParser from 'cookie-parser';
@@ -15,10 +17,26 @@ import { kakaoRouter } from './routes/kakao';
 import { membersRouter } from './routes/members';
 
 const logger = pino({ level: process.env.LOG_LEVEL ?? 'info' });
+
+/**
+ * The bridge and skill secrets travel in the query string, so a raw request log
+ * would print them. Keep the method and path, hide the value.
+ */
+const redactSecret = (url: string | undefined): string | undefined =>
+  url?.replace(/([?&]secret=)[^&]*/g, '$1redacted');
+
+const requestSerializer = (
+  request: IncomingMessage,
+): Record<string, unknown> => ({
+  method: request.method,
+  url: redactSecret(request.url),
+});
+
 const app = express();
 
 app.disable('x-powered-by');
-app.use(pinoHttp({ logger }));
+app.use(pinoHttp({ logger, serializers: { req: requestSerializer } }));
+
 
 if (config.corsOrigins.length > 0) {
   app.use(cors({ origin: config.corsOrigins, credentials: true }));

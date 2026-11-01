@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { after, before, beforeEach, test } from 'node:test';
 
-import { eventClaimsTable, eventsTable, membersTable } from '@workspace/db';
+import { eq, eventClaimsTable, eventsTable, membersTable } from '@workspace/db';
 
 import {
   createTestDatabase,
@@ -120,7 +120,23 @@ test('inactive events and unknown ids are rejected', async () => {
   );
 });
 
+test('inactive members cannot claim an event', async () => {
+  const member = await createMember();
+  const event = await createEvent();
+
+  await context.db
+    .update(membersTable)
+    .set({ status: 'inactive' })
+    .where(eq(membersTable.id, member.id));
+
+  await expectHttpError(
+    submitEventClaim(context.db, member.id, event.id, '문구', atKst(9, 1)),
+    403,
+  );
+});
+
 test('blank phrases are rejected', async () => {
+
   const member = await createMember();
   const event = await createEvent();
 

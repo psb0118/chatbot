@@ -66,6 +66,8 @@ postgresql://user:password@host:5432/dbname?sslmode=require
 | `CLERK_SECRET_KEY` / `CLERK_PUBLISHABLE_KEY` | 선택 | 웹 로그인·관리자 화면용. **기기 봇만 쓸 때는 불필요** |
 | `ADMIN_EMAILS` | 선택 | 관리자 화면용. 없으면 관리자 API 503 |
 | `CORS_ORIGINS` | 선택 | 웹을 다른 도메인에 둘 때 |
+| `KAKAO_SKILL_SECRET` | 선택 | 카카오 공식 스킬을 함께 쓸 때. `x-kakao-skill-secret` 헤더 값과 같게 |
+| `LOG_LEVEL` | 선택 | 로그 수준 (기본 `info`). `secret` 쿼리 값은 로그에 `redacted`로 남음 |
 
 - [ ] `DATABASE_URL`, `DEVICE_BRIDGE_SECRET` 입력
 - [ ] 비밀키는 채팅/깃에 남기지 말고 호스팅 환경변수로만
@@ -195,6 +197,11 @@ function response(room, msg, sender, isGroupChat, replier) {
 }
 ```
 
+> `?secret=`은 URL에 남습니다. 스크립트 화면을 캡처해 공유하지 말고, 호스팅의
+> 액세스 로그에도 전체 URL이 찍힐 수 있다는 점을 기억하세요. 노출됐다면 값을
+> 교체하면 됩니다. (서버 애플리케이션 로그에서는 `secret` 값이 `redacted`로
+> 가려집니다.)
+
 - [ ] `API` 상수에 본인 도메인 + 시크릿 입력
 - [ ] `레거시 API 사용` 체크 / `통합된 매개변수` 체크 해제
 - [ ] 봇 스위치 ON
@@ -236,8 +243,7 @@ function response(room, msg, sender, isGroupChat, replier) {
 - 같은 닉네임을 쓰는 사람이 둘이면 충돌합니다. 방 규칙으로 닉네임 중복을 금지하거나
   `닉네임#번호` 형태를 권장하세요.
 - 밴: 관리자 화면 → 멤버 → `수정` → **멤버 상태 = 비활성**.
-  출석·연동·랭킹 노출이 차단됩니다. (이벤트 참여 신청은 아직 막지 않으므로
-  `참여 검토`에서 반려)
+  출석·이벤트 참여 신청·연동·랭킹 노출이 모두 차단됩니다.
 - 봇 계정은 절대 본 계정과 섞지 마세요. 카카오 제재는 봇 계정에만 떨어집니다.
 
 ---
